@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import type { Module } from './AdminLTEApp'
 import { AdminLTEHome } from './AdminLTEHome'
@@ -6,6 +6,12 @@ import { AdminLTEHome } from './AdminLTEHome'
 export function AdminLTELayout() {
   const { usuario, logout } = useAuth()
   const [modulo, setModulo] = useState<Module>('home')
+
+  useEffect(() => {
+    const prev = document.body.className
+    document.body.className = 'hold-transition sidebar-mini layout-fixed'
+    return () => { document.body.className = prev }
+  }, [])
 
   function renderModulo() {
     switch (modulo) {

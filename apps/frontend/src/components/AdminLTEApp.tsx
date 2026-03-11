@@ -24,43 +24,60 @@ export function AdminLTEApp() {
   return <AdminLTELayout />
 }
 
+interface GoogleAccounts {
+  id: {
+    initialize: (config: { client_id: string; callback: (r: { credential: string }) => void }) => void
+    renderButton: (el: HTMLElement, opts: Record<string, string>) => void
+  }
+}
+
 function LoginPage({ onLogin }: { readonly onLogin: (token: string) => Promise<void> }) {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 
+  // Inicializa o botão do Google após o script carregar
   useEffect(() => {
-    (window as unknown as Record<string, unknown>).handleGoogleLogin = (response: { credential: string }) => {
-      onLogin(response.credential).catch(console.error)
+    function initGoogle() {
+      const google = (window as unknown as { google?: GoogleAccounts }).google
+      if (!google) return
+
+      google.id.initialize({
+        client_id: clientId,
+        callback: (response) => onLogin(response.credential).catch(console.error),
+      })
+
+      const btn = document.getElementById('google-signin-btn')
+      if (btn) {
+        google.id.renderButton(btn, {
+          type: 'standard',
+          size: 'large',
+          theme: 'outline',
+          text: 'sign_in_with',
+          shape: 'rectangular',
+          logo_alignment: 'left',
+        })
+      }
     }
-    return () => {
-      delete (window as unknown as Record<string, unknown>).handleGoogleLogin
+
+    const google = (window as unknown as { google?: GoogleAccounts }).google
+    if (google) {
+      initGoogle()
+    } else {
+      // script ainda carregando, aguarda
+      const script = document.querySelector('script[src*="accounts.google.com"]')
+      script?.addEventListener('load', initGoogle)
+      return () => script?.removeEventListener('load', initGoogle)
     }
-  }, [onLogin])
+  }, [clientId, onLogin])
 
   return (
-    <div className="hold-transition login-page">
-      <div className="login-box">
-        <div className="login-logo">
-          <strong>Meu Projeto</strong>
-        </div>
-        <div className="card">
-          <div className="card-body login-card-body text-center">
-            <p className="login-box-msg">Faça login para continuar</p>
-            <div
-              id="g_id_onload"
-              data-client_id={clientId}
-              data-callback="handleGoogleLogin"
-              data-auto_prompt="false"
-            />
-            <div
-              className="g_id_signin"
-              data-type="standard"
-              data-size="large"
-              data-theme="outline"
-              data-text="sign_in_with"
-              data-shape="rectangular"
-              data-logo_alignment="left"
-            />
-          </div>
+    <div className="login-box">
+      <div className="login-logo">
+        <strong>Meu Projeto</strong>
+      </div>
+      <div className="card">
+        <div className="card-body login-card-body text-center">
+          <p className="login-box-msg">Faça login para continuar</p>
+          <div id="google-signin-btn" />
         </div>
       </div>
     </div>
