@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { AdminLTELayout } from './AdminLTELayout'
 import { AdminLTEHome } from './AdminLTEHome'
@@ -26,9 +27,14 @@ export function AdminLTEApp() {
 function LoginPage({ onLogin }: { readonly onLogin: (token: string) => Promise<void> }) {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 
-  function handleCredential(response: { credential: string }) {
-    onLogin(response.credential).catch(console.error)
-  }
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).handleGoogleLogin = (response: { credential: string }) => {
+      onLogin(response.credential).catch(console.error)
+    }
+    return () => {
+      delete (window as unknown as Record<string, unknown>).handleGoogleLogin
+    }
+  }, [onLogin])
 
   return (
     <div className="hold-transition login-page">
@@ -57,11 +63,6 @@ function LoginPage({ onLogin }: { readonly onLogin: (token: string) => Promise<v
           </div>
         </div>
       </div>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `window.handleGoogleLogin = ${handleCredential.toString()}`,
-        }}
-      />
     </div>
   )
 }
