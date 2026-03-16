@@ -42,3 +42,257 @@ export async function del(path: string, headers: Record<string, string> = {}) {
   if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`)
   return res.json()
 }
+
+// ─── Assistente Social Midia API ─────────────────────────────────────────────
+
+function getToken(): string | null {
+  return localStorage.getItem('aa_jwt')
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export const api = {
+  // Businesses
+  listBusinesses: () => request<Business[]>('GET', '/api/v1/businesses'),
+  createBusiness: (data: { name: string; type: string; brand_context?: Record<string, unknown> }) =>
+    request<Business>('POST', '/api/v1/businesses', data),
+  connectInstagram: (businessId: string, data: { instagram_account_id: string; access_token: string }) =>
+    request('POST', `/api/v1/businesses/${businessId}/connect-instagram`, data),
+
+  // Content
+  generateContent: (data: GenerateRequest) => request<ContentDraft>('POST', '/api/v1/content/generate', data),
+  listDrafts: (status?: string) => request<ContentDraft[]>('GET', `/api/v1/content${status ? `?status=${status}` : ''}`),
+  previewDraft: (id: string) => request<ContentDraft>('GET', `/api/v1/content/${id}/preview`),
+  approveDraft: (id: string) => request('POST', `/api/v1/content/${id}/approve`),
+  rejectDraft: (id: string) => request('POST', `/api/v1/content/${id}/reject`),
+  generateImage: (id: string) => request<{ draft_id: string; image_url: string }>('POST', `/api/v1/content/${id}/generate-image`),
+
+  // Schedule
+  calendar: (month?: number, year?: number) => {
+    const params = new URLSearchParams()
+    if (month) params.set('month', String(month))
+    if (year) params.set('year', String(year))
+    return request<ScheduledPost[]>('GET', `/api/v1/schedule/calendar?${params}`)
+  },
+  schedulePost: (data: { draft_id: string; scheduled_for: string }) =>
+    request('POST', '/api/v1/schedule/post', data),
+  publishNow: (draftId: string) => request('POST', `/api/v1/schedule/publish-now/${draftId}`),
+
+  // Posts
+  postHistory: () => request<HistoryPost[]>('GET', '/api/v1/posts/history'),
+  postAnalytics: (businessId: string) =>
+    request<PostAnalytics>('GET', `/api/v1/posts/analytics?business_id=${businessId}`),
+
+  // Strategy
+  getStrategy: (businessId: string) => request<BrandStrategy>('GET', `/api/v1/strategy/${businessId}`),
+  updateStrategy: (businessId: string, data: Partial<BrandStrategy>) =>
+    request<BrandStrategy>('PUT', `/api/v1/strategy/${businessId}`, data),
+
+  // Batch content
+  generateBatch: (data: BatchGenerateRequest) =>
+    request<BatchGenerateResponse>('POST', '/api/v1/content/generate-batch', data),
+
+  // Agent
+  agentChat: (data: { business_id: string; message: string }) =>
+    request<AgentChatResponse>('POST', '/api/v1/agent/chat', data),
+  agentHistory: (businessId: string) =>
+    request<AgentHistoryResponse>('GET', `/api/v1/agent/history/${businessId}`),
+  agentClearHistory: (businessId: string) =>
+    request('DELETE', `/api/v1/agent/history/${businessId}`),
+
+  // Google Ads / Luna
+  getAdsAccount: (businessId: string) =>
+    request<AdsAccount>('GET', `/api/v1/ads/account/${businessId}`),
+  connectAdsAccount: (data: AdsAccountConnect) =>
+    request('POST', '/api/v1/ads/account/connect', data),
+  disconnectAdsAccount: (businessId: string) =>
+    request('DELETE', `/api/v1/ads/account/${businessId}`),
+  lunaChat: (data: { business_id: string; message: string }) =>
+    request<AgentChatResponse>('POST', '/api/v1/ads/chat', data),
+  lunaHistory: (businessId: string) =>
+    request<AgentHistoryResponse>('GET', `/api/v1/ads/history/${businessId}`),
+  lunaClearHistory: (businessId: string) =>
+    request('DELETE', `/api/v1/ads/history/${businessId}`),
+
+  // Designer / Pixel
+  designerChat: async (data: { business_id: string; message: string; image?: File }) => {
+    const form = new FormData()
+    form.append('business_id', data.business_id)
+    form.append('message', data.message)
+    if (data.image) form.append('image', data.image)
+    const token = localStorage.getItem('aa_jwt')
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(`${API_BASE}/api/v1/designer/chat`, { method: 'POST', headers, body: form })
+    if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.detail || err.error || `HTTP ${res.status}`) }
+    return res.json() as Promise<DesignerChatResponse>
+  },
+  getVisualIdentity: (businessId: string) =>
+    request<VisualIdentity>('GET', `/api/v1/designer/identity/${businessId}`),
+  updateVisualIdentity: (businessId: string, data: Partial<VisualIdentity>) =>
+    request<{ success: boolean }>('PUT', `/api/v1/designer/identity/${businessId}`, data),
+  designerClearHistory: (businessId: string) =>
+    request('DELETE', `/api/v1/designer/history/${businessId}`),
+}
+
+// Types
+export interface Business {
+  id: string
+  name: string
+  type: string
+  instagram_account_id?: string
+  brand_context?: Record<string, unknown>
+  criado_em: string
+}
+
+export interface ContentDraft {
+  id: string
+  business_id: string
+  business_name?: string
+  format: 'post' | 'story' | 'reel'
+  caption: string
+  hashtags: string[]
+  image_url?: string
+  visual_description?: string
+  call_to_action?: string
+  best_posting_time?: string
+  status: 'pending_approval' | 'approved' | 'rejected' | 'published'
+  scheduled_for?: string
+  criado_em: string
+}
+
+export interface ScheduledPost {
+  id: string
+  content_draft_id: string
+  platform: string
+  scheduled_for: string
+  posted_at?: string
+  status: 'scheduled' | 'published' | 'failed'
+  format: string
+  caption: string
+  image_url?: string
+  business_name: string
+}
+
+export interface HistoryPost {
+  id: string
+  platform: string
+  scheduled_for: string
+  posted_at?: string
+  instagram_media_id?: string
+  status: string
+  format: string
+  caption: string
+  image_url?: string
+  business_name: string
+}
+
+export interface GenerateRequest {
+  business_id: string
+  objective: string
+  format: 'post' | 'story' | 'reel'
+  tone: 'profissional' | 'descontraido' | 'urgente' | 'educativo'
+  audience: string
+}
+
+export interface BrandStrategy {
+  id?: string
+  business_id?: string
+  personas?: Array<Record<string, unknown>>
+  content_pillars?: string[]
+  posting_frequency?: Record<string, unknown>
+  brand_tone?: string
+  brand_colors?: string[]
+  competitors?: string[]
+  goals?: string[]
+}
+
+export interface PostAnalytics {
+  business_id: string
+  total_drafts: number
+  approved: number
+  rejected: number
+  published: number
+  approval_rate_pct: number
+  top_formats: Array<{ format: string; count: number }>
+  best_times: Array<{ time: string; count: number }>
+  trend_30d: Array<{ day: string; count: number }>
+}
+
+export interface BatchGenerateRequest {
+  business_id: string
+  items: Array<{
+    objective: string
+    format: 'post' | 'story' | 'reel'
+    tone?: string
+    audience?: string
+  }>
+}
+
+export interface BatchGenerateResponse {
+  created: number
+  drafts: ContentDraft[]
+  errors: Array<{ index: number; objective: string; error: string }>
+}
+
+export interface AgentChatResponse {
+  response: string
+  message_count: number
+}
+
+export interface AgentHistoryResponse {
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  business_id: string
+}
+
+export interface AdsAccount {
+  connected: boolean
+  business_id?: string
+  customer_id?: string
+  is_test_account?: boolean
+  login_customer_id?: string
+}
+
+export interface AdsAccountConnect {
+  business_id: string
+  customer_id: string
+  refresh_token: string
+  login_customer_id?: string
+  is_test_account: boolean
+}
+
+export interface DesignerChatResponse {
+  response: string
+  image_url?: string
+  message_count: number
+}
+
+export interface VisualIdentity {
+  found?: boolean
+  primary_color?: string
+  secondary_color?: string
+  accent_color?: string
+  background_color?: string
+  text_color?: string
+  font_heading?: string
+  font_body?: string
+  style_description?: string
+  logo_url?: string
+  extra_context?: string
+}

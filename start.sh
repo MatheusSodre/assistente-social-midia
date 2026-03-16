@@ -35,7 +35,7 @@ kill $(lsof -ti:5173) 2>/dev/null || true
 sleep 1
 
 # backend
-(cd "$BACKEND_DIR" && .venv/bin/uvicorn api.main:app --reload --port 8000) > /tmp/backend.log 2>&1 &
+(cd "$BACKEND_DIR" && .venv/bin/uvicorn api.main:app --reload --reload-dir api --reload-dir src --port 8000) > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 echo "Backend PID: $BACKEND_PID"
 

@@ -3,8 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { AdminLTELayout } from './AdminLTELayout'
 import { AdminLTEHome } from './AdminLTEHome'
 
-export type Module = 'home'
-// Adicionar novos módulos: 'home' | 'clientes' | 'documentos' | 'meu-modulo'
+export type Module = 'home' | 'dashboard' | 'generate' | 'businesses' | 'history' | 'agent' | 'calendar' | 'strategy' | 'ads' | 'designer'
 
 export function AdminLTEApp() {
   const { usuario, loading, login } = useAuth()
@@ -25,29 +24,33 @@ export function AdminLTEApp() {
 }
 
 interface GoogleAccounts {
-  id: {
-    initialize: (config: { client_id: string; callback: (r: { credential: string }) => void }) => void
-    renderButton: (el: HTMLElement, opts: Record<string, string>) => void
+  accounts: {
+    id: {
+      initialize: (config: { client_id: string; callback: (r: { credential: string }) => void }) => void
+      renderButton: (el: HTMLElement, opts: Record<string, string>) => void
+    }
   }
 }
 
 function LoginPage({ onLogin }: { readonly onLogin: (token: string) => Promise<void> }) {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 
-  // Inicializa o botão do Google após o script carregar
+  // Inicializa o botão do Google — polling até o script carregar
   useEffect(() => {
+    let timer: ReturnType<typeof setInterval>
+
     function initGoogle() {
       const google = (window as unknown as { google?: GoogleAccounts }).google
-      if (!google) return
+      if (!google) return false
 
-      google.id.initialize({
+      google.accounts.id.initialize({
         client_id: clientId,
         callback: (response) => onLogin(response.credential).catch(console.error),
       })
 
       const btn = document.getElementById('google-signin-btn')
       if (btn) {
-        google.id.renderButton(btn, {
+        google.accounts.id.renderButton(btn, {
           type: 'standard',
           size: 'large',
           theme: 'outline',
@@ -56,23 +59,23 @@ function LoginPage({ onLogin }: { readonly onLogin: (token: string) => Promise<v
           logo_alignment: 'left',
         })
       }
+      return true
     }
 
-    const google = (window as unknown as { google?: GoogleAccounts }).google
-    if (google) {
-      initGoogle()
-    } else {
-      // script ainda carregando, aguarda
-      const script = document.querySelector('script[src*="accounts.google.com"]')
-      script?.addEventListener('load', initGoogle)
-      return () => script?.removeEventListener('load', initGoogle)
+    if (!initGoogle()) {
+      // polling a cada 200ms até o script do Google estar disponível
+      timer = setInterval(() => {
+        if (initGoogle()) clearInterval(timer)
+      }, 200)
     }
+
+    return () => clearInterval(timer)
   }, [clientId, onLogin])
 
   return (
     <div className="login-box">
       <div className="login-logo">
-        <strong>Meu Projeto</strong>
+        <strong>Assistente Social Midia</strong>
       </div>
       <div className="card">
         <div className="card-body login-card-body text-center">
