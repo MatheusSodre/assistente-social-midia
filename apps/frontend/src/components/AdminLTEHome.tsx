@@ -111,9 +111,9 @@ export function AdminLTEHome({ onNavigate }: AdminLTEHomeProps) {
                   <button
                     className="btn btn-light btn-sm font-weight-bold"
                     style={{ borderRadius: 8, color: '#764ba2' }}
-                    onClick={() => onNavigate?.('generate')}
+                    onClick={() => onNavigate?.('agency')}
                   >
-                    <i className="fas fa-magic mr-1" /> Criar post
+                    <i className="fas fa-magic mr-1" /> Criar conteúdo
                   </button>
                   {stats.pending > 0 && (
                     <button
@@ -230,10 +230,10 @@ export function AdminLTEHome({ onNavigate }: AdminLTEHomeProps) {
             <i className="fas fa-bolt mr-1" /> Acesso rápido
           </h6>
         </div>
-        <QuickAction icon="magic" label="Gerar com IA" description="Crie post, story ou reel" color="primary" onClick={() => onNavigate?.('generate')} />
-        <QuickAction icon="robot" label="Agente Mara" description="Social media IA" color="info" onClick={() => onNavigate?.('agent')} />
-        <QuickAction icon="palette" label="Designer Pixel" description="Edite imagens" color="warning" onClick={() => onNavigate?.('designer')} />
-        <QuickAction icon="chess" label="Estratégia" description="Defina pilares de marca" color="success" onClick={() => onNavigate?.('strategy')} />
+        <QuickAction icon="magic" label="Criar Conteúdo" description="Posts, stories e reels com IA" color="primary" onClick={() => onNavigate?.('agency')} />
+        <QuickAction icon="check-double" label="Revisar & Aprovar" description="Conteúdo aguardando aprovação" color="warning" onClick={() => onNavigate?.('dashboard')} />
+        <QuickAction icon="chess" label="Estratégia & Marca" description="Defina tom, cores e pilares" color="success" onClick={() => onNavigate?.('strategy')} />
+        <QuickAction icon="calendar-alt" label="Calendário" description="Agende suas publicações" color="info" onClick={() => onNavigate?.('calendar')} />
       </div>
     </div>
   )

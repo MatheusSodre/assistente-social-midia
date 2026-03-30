@@ -12,18 +12,36 @@ from typing import Any
 import anthropic
 
 from src.db.connection import get_connection
+from src.engines.brand_context import get_unified_brand_context, brand_context_to_prompt
 from src.engines.orchestrator import generate_content
 
 logger = logging.getLogger(__name__)
 
 _client = anthropic.Anthropic()
 
-MARA_SYSTEM = """Você é Mara, especialista sênior em Social Media com 10 anos de experiência.
-Você é estratégica, criativa e orientada a resultados. Fala português brasileiro de forma clara e amigável.
-Você tem acesso a ferramentas para criar conteúdo, analisar performance e gerenciar o calendário editorial do cliente.
+MODEL_SMART = "claude-haiku-4-5-20251001"
+MODEL_FAST = "claude-haiku-4-5-20251001"
 
-Quando o usuário pedir conteúdo, use as ferramentas disponíveis para executar de verdade — não apenas sugira.
-Após executar ações, apresente os resultados de forma resumida e ofereça próximos passos.
+MARA_SYSTEM = """Você é Mara, Social Media Manager com 10 anos de experiência em redes sociais.
+
+QUEM VOCÊ É:
+Você respira redes sociais. Começou como community manager em agências pequenas e hoje lidera estratégias de conteúdo para marcas de todos os tamanhos. Você entende algoritmos, tendências e o que faz as pessoas pararem o scroll e engajarem.
+
+SUA PERSONALIDADE:
+- Entusiasmada e criativa: adora criar conteúdo e fica genuinamente animada com boas ideias
+- Prática e executora: quando pedem conteúdo, você CRIA na hora usando suas ferramentas, não fica só sugerindo
+- Antenada: fala com naturalidade sobre trends, formatos que estão performando bem, melhores horários
+- Empática: entende que cada negócio tem um público diferente e adapta a linguagem
+- Organizada: pensa em calendário editorial, frequência, mix de formatos
+
+COMO TRABALHAR:
+- Quando pedirem conteúdo → use generate_content ou generate_batch_content imediatamente
+- Após criar, apresente um resumo bonito: caption (primeiras linhas), formato, e próximos passos
+- Sugira proativamente: "Que tal criarmos stories para complementar esse post?"
+- Se o cliente não tem estratégia definida, pergunte sobre o tom, público e objetivos antes de criar
+- Use a identidade visual da marca (cores, estilo) para orientar as descrições visuais dos posts
+
+Fale português brasileiro de forma natural, como uma profissional falaria com seu cliente. Seja calorosa mas profissional.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -142,7 +160,13 @@ TOOLS: list[dict[str, Any]] = [
 # ─── Tool Executors ───────────────────────────────────────────────────────────
 
 async def _exec_generate_content(business_id: str, business_name: str, business_type: str,
-                                  brand_strategy: dict | None, tool_input: dict) -> dict:
+                                  brand_strategy: dict | None, visual_identity: dict | None,
+                                  tool_input: dict) -> dict:
+    # Merge visual_identity into brand_strategy for script engine
+    enriched_strategy = dict(brand_strategy) if brand_strategy else {}
+    if visual_identity:
+        enriched_strategy["visual_identity"] = visual_identity
+
     draft = await generate_content(
         business_id=business_id,
         business_name=business_name,
@@ -151,7 +175,7 @@ async def _exec_generate_content(business_id: str, business_name: str, business_
         format=tool_input.get("format", "post"),
         tone=tool_input.get("tone", "profissional"),
         audience=tool_input.get("audience", "geral"),
-        brand_strategy=brand_strategy,
+        brand_strategy=enriched_strategy,
     )
     return {
         "success": True,
@@ -164,7 +188,12 @@ async def _exec_generate_content(business_id: str, business_name: str, business_
 
 
 async def _exec_generate_batch(business_id: str, business_name: str, business_type: str,
-                                brand_strategy: dict | None, tool_input: dict) -> dict:
+                                brand_strategy: dict | None, visual_identity: dict | None,
+                                tool_input: dict) -> dict:
+    enriched_strategy = dict(brand_strategy) if brand_strategy else {}
+    if visual_identity:
+        enriched_strategy["visual_identity"] = visual_identity
+
     items = tool_input.get("items", [])[:7]
     tasks = [
         generate_content(
@@ -175,7 +204,7 @@ async def _exec_generate_batch(business_id: str, business_name: str, business_ty
             format=item.get("format", "post"),
             tone=item.get("tone", "profissional"),
             audience=item.get("audience", "geral"),
-            brand_strategy=brand_strategy,
+            brand_strategy=enriched_strategy,
         )
         for item in items
     ]
@@ -439,8 +468,7 @@ def _load_conversation(business_id: str, usuario_id: str) -> list[dict]:
 
 
 def _save_conversation(business_id: str, usuario_id: str, messages: list[dict]) -> None:
-    # Keep last 40 messages
-    trimmed = messages[-40:] if len(messages) > 40 else messages
+    trimmed = messages[-20:] if len(messages) > 20 else messages
     msgs_json = json.dumps(trimmed, ensure_ascii=False, default=str)
 
     with get_connection() as conn:
@@ -476,40 +504,35 @@ async def run_agent(
     business_id: str,
     usuario_id: str,
     user_message: str,
+    ephemeral: bool = False,
 ) -> dict[str, Any]:
     """
     Executa o loop agentico da Mara e retorna a resposta final.
+    Se ephemeral=True, não carrega nem salva histórico (delegação da Sofia).
     """
-    # Load business info for context
-    biz_info = _exec_get_business_info(business_id)
-    business = biz_info.get("business", {})
-    brand_strategy = biz_info.get("brand_strategy")
+    # Load unified brand context
+    brand_ctx = get_unified_brand_context(business_id)
+    business = brand_ctx.get("business", {})
+    brand_strategy = brand_ctx.get("strategy")
+    visual_identity = brand_ctx.get("visual_identity")
     business_name = business.get("name", "empresa")
     business_type = business.get("type", "negócio")
 
-    # Load conversation history
-    history = _load_conversation(business_id, usuario_id)
+    # Load conversation history (skip in ephemeral mode)
+    history = [] if ephemeral else _load_conversation(business_id, usuario_id)
 
     # Add new user message
     history.append({"role": "user", "content": user_message})
 
-    system_with_context = (
-        f"{MARA_SYSTEM}\n\n"
-        f"Business atual: {business_name} (tipo: {business_type})\n"
-        f"Business ID: {business_id}\n"
-    )
-    if brand_strategy and brand_strategy.get("content_pillars"):
-        pillars = brand_strategy.get("content_pillars", [])
-        system_with_context += f"Pilares de conteúdo: {', '.join(str(p) for p in pillars)}\n"
-    if brand_strategy and brand_strategy.get("brand_tone"):
-        system_with_context += f"Tom de voz: {brand_strategy['brand_tone']}\n"
+    system_with_context = MARA_SYSTEM + brand_context_to_prompt(brand_ctx)
 
     messages = list(history)
-    max_iterations = 10
+    max_iterations = 8
 
-    for _ in range(max_iterations):
+    for iteration in range(max_iterations):
+        model = MODEL_SMART if iteration == 0 else MODEL_FAST
         response = _client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=4096,
             system=system_with_context,
             tools=TOOLS,
@@ -535,11 +558,11 @@ async def run_agent(
             try:
                 if tool_name == "generate_content":
                     result = await _exec_generate_content(
-                        business_id, business_name, business_type, brand_strategy, tool_input
+                        business_id, business_name, business_type, brand_strategy, visual_identity, tool_input
                     )
                 elif tool_name == "generate_batch_content":
                     result = await _exec_generate_batch(
-                        business_id, business_name, business_type, brand_strategy, tool_input
+                        business_id, business_name, business_type, brand_strategy, visual_identity, tool_input
                     )
                 elif tool_name == "list_pending_drafts":
                     result = _exec_list_pending(business_id)
@@ -584,9 +607,9 @@ async def run_agent(
     if not final_text:
         final_text = "Ação executada com sucesso!"
 
-    # Save updated conversation (strip tool_result messages for cleaner history,
-    # but keep tool_use blocks so context is preserved)
-    _save_conversation(business_id, usuario_id, messages)
+    # Save updated conversation (skip in ephemeral mode)
+    if not ephemeral:
+        _save_conversation(business_id, usuario_id, messages)
 
     return {
         "response": final_text,

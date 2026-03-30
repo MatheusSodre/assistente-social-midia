@@ -297,8 +297,8 @@ export function DesignerPage() {
                   <div
                     className="rounded p-3 small"
                     style={{
-                      background: msg.role === 'user' ? '#007bff' : '#f4f6f9',
-                      color: msg.role === 'user' ? '#fff' : '#333',
+                      background: msg.role === 'user' ? '#007bff' : 'var(--bg-chat-msg)',
+                      color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
                     }}
@@ -345,7 +345,7 @@ export function DesignerPage() {
                 >
                   P
                 </div>
-                <div className="rounded p-3 small" style={{ background: '#f4f6f9', color: '#333' }}>
+                <div className="rounded p-3 small" style={{ background: 'var(--bg-chat-msg)', color: 'var(--text-primary)' }}>
                   <span className="spinner-border spinner-border-sm mr-1" />
                   Pixel está criando...
                 </div>

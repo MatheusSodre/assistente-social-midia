@@ -21,7 +21,15 @@ CREATE TABLE IF NOT EXISTS businesses (
     type VARCHAR(100) NOT NULL COMMENT 'dentista, ecommerce, automovel, etc',
     instagram_account_id VARCHAR(255) NULL,
     instagram_access_token TEXT NULL COMMENT 'token criptografado com Fernet',
-    brand_context JSON NULL COMMENT 'cores, tom de voz, logo, etc',
+    description TEXT NULL COMMENT 'Descrição do negócio, produtos/serviços, proposta de valor',
+    location VARCHAR(255) NULL COMMENT 'Cidade/região de atuação',
+    website_url VARCHAR(500) NULL,
+    instagram_handle VARCHAR(255) NULL COMMENT '@handle sem arroba',
+    linkedin_url VARCHAR(500) NULL,
+    services JSON NULL COMMENT 'Lista de produtos/serviços oferecidos',
+    target_audience TEXT NULL COMMENT 'Descrição do público-alvo',
+    differentials TEXT NULL COMMENT 'O que diferencia este negócio',
+    brand_context JSON NULL COMMENT 'Dados extraídos por inteligência (website, IG, PDF)',
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_businesses_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
@@ -144,5 +152,89 @@ CREATE TABLE IF NOT EXISTS designer_conversations (
     UNIQUE KEY uk_designer_conv_business (business_id),
     CONSTRAINT fk_designer_conv_business FOREIGN KEY (business_id)
         REFERENCES businesses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agency_conversations (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    business_id CHAR(36) NOT NULL,
+    usuario_id CHAR(36) NOT NULL,
+    messages JSON NOT NULL,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_agency_conv_business (business_id),
+    CONSTRAINT fk_agency_conv_business FOREIGN KEY (business_id)
+        REFERENCES businesses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS finance_connections (
+    id CHAR(36) PRIMARY KEY,
+    usuario_id CHAR(36) NOT NULL,
+    item_id VARCHAR(100) NOT NULL COMMENT 'Pluggy itemId',
+    connector_name VARCHAR(100) NULL COMMENT 'ex: Nubank, Bradesco',
+    status ENUM('updating','updated','error') NOT NULL DEFAULT 'updating',
+    last_synced_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_fin_conn_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS finance_transactions (
+    id CHAR(36) PRIMARY KEY,
+    connection_id CHAR(36) NOT NULL,
+    pluggy_id VARCHAR(100) NULL,
+    account_id VARCHAR(100) NULL,
+    date DATE NULL,
+    description VARCHAR(500) NULL,
+    amount DECIMAL(12,2) NULL,
+    type ENUM('CREDIT','DEBIT') NULL,
+    category VARCHAR(100) NULL,
+    status ENUM('PENDING','POSTED') NOT NULL DEFAULT 'POSTED',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_pluggy_id (pluggy_id),
+    CONSTRAINT fk_fin_tx_conn FOREIGN KEY (connection_id) REFERENCES finance_connections(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
+# Migrations para bancos já existentes (ALTER TABLE seguras com IF NOT EXISTS via procedure)
+MIGRATIONS = """
+SET @dbname = DATABASE();
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'description';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN description TEXT NULL AFTER type', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'location';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN location VARCHAR(255) NULL AFTER description', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'website_url';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN website_url VARCHAR(500) NULL AFTER location', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'instagram_handle';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN instagram_handle VARCHAR(255) NULL AFTER website_url', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'linkedin_url';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN linkedin_url VARCHAR(500) NULL AFTER instagram_handle', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'services';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN services JSON NULL AFTER linkedin_url', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'target_audience';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN target_audience TEXT NULL AFTER services', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'differentials';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE businesses ADD COLUMN differentials TEXT NULL AFTER target_audience', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 """

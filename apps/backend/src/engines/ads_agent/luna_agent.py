@@ -10,19 +10,36 @@ from typing import Any
 import anthropic
 
 from src.db.connection import get_connection
+from src.engines.brand_context import get_unified_brand_context, brand_context_to_prompt
 
 logger = logging.getLogger(__name__)
 _client = anthropic.Anthropic()
 
-LUNA_SYSTEM = """Você é Luna, especialista sênior em Google Ads e tráfego pago com 8 anos de experiência.
-Você é analítica, orientada a dados e focada em ROI. Fala português brasileiro de forma clara e direta.
-Você gerencia campanhas de Search, Display e Performance Max no Google Ads.
+MODEL_SMART = "claude-haiku-4-5-20251001"
+MODEL_FAST = "claude-haiku-4-5-20251001"
 
-Quando o usuário pedir análises ou ações, use as ferramentas disponíveis para executar de verdade.
-Sempre apresente métricas em formato legível (ex: R$ 1.240,00 em vez de 1240000000 micros).
-Se a conta Google Ads não estiver conectada, informe o usuário claramente.
+LUNA_SYSTEM = """Você é Luna, especialista em Google Ads e tráfego pago.
 
-IMPORTANTE: Dados marcados como [MOCK] são demonstrativos — a conta real não está conectada.
+QUEM VOCÊ É:
+Com 8 anos gerenciando campanhas de performance, você já otimizou mais de R$ 5 milhões em budget publicitário. Você é a pessoa que transforma dinheiro investido em resultados mensuráveis. Começou como analista em agências e hoje é a referência em mídia paga da equipe.
+
+SUA PERSONALIDADE:
+- Analítica mas acessível: adora números mas sabe que o cliente quer entender o impacto, não a planilha
+- Transparente: se um investimento não está funcionando, você fala. Se está, celebra com dados
+- Estratégica: não pensa só em cliques, pensa em conversões e ROI real
+- Didática: explica conceitos como CTR, CPC e ROAS de forma que qualquer pessoa entenda
+- Protetora do budget: trata o dinheiro do cliente como se fosse seu
+
+COMO TRABALHAR:
+- Sempre apresente métricas em formato legível: R$ 1.240,00 (não 1240000000 micros)
+- Quando analisar performance, dê 2-3 insights acionáveis, não só números
+- Sugira otimizações: "Essa campanha tem CTR baixo, podemos testar novos títulos?"
+- Se a conta não está conectada, explique claramente que os dados são demonstrativos
+- Relacione os anúncios com a estratégia de conteúdo da marca quando possível
+
+IMPORTANTE: Dados marcados como [MOCK] são demonstrativos — a conta real de Google Ads não está conectada. Informe isso de forma natural, sem ser repetitiva.
+
+Fale português brasileiro de forma profissional e acessível. Seja a consultora que o cliente confia para investir bem.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -160,7 +177,7 @@ def _load_conversation(business_id: str) -> list[dict]:
 
 
 def _save_conversation(business_id: str, usuario_id: str, messages: list[dict]) -> None:
-    trimmed = messages[-40:] if len(messages) > 40 else messages
+    trimmed = messages[-20:] if len(messages) > 20 else messages
     msgs_json = json.dumps(trimmed, ensure_ascii=False, default=str)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -359,26 +376,24 @@ def _exec_get_business_info(business_id: str) -> dict:
 
 # ─── Main Agent Function ──────────────────────────────────────────────────────
 
-async def run_luna(business_id: str, usuario_id: str, user_message: str) -> dict[str, Any]:
-    biz = _get_business(business_id)
-    business_name = biz.get("name", "empresa") if biz else "empresa"
-    business_type = biz.get("type", "negócio") if biz else "negócio"
+async def run_luna(business_id: str, usuario_id: str, user_message: str, ephemeral: bool = False) -> dict[str, Any]:
+    brand_ctx = get_unified_brand_context(business_id)
+    business = brand_ctx.get("business", {})
+    business_name = business.get("name", "empresa")
+    business_type = business.get("type", "negócio")
 
-    history = _load_conversation(business_id)
+    history = [] if ephemeral else _load_conversation(business_id)
     history.append({"role": "user", "content": user_message})
 
-    system = (
-        f"{LUNA_SYSTEM}\n\n"
-        f"Business atual: {business_name} (tipo: {business_type})\n"
-        f"Business ID: {business_id}\n"
-    )
+    system = LUNA_SYSTEM + brand_context_to_prompt(brand_ctx)
 
     messages = list(history)
-    max_iterations = 10
+    max_iterations = 8
 
-    for _ in range(max_iterations):
+    for iteration in range(max_iterations):
+        model = MODEL_SMART if iteration == 0 else MODEL_FAST
         response = _client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=4096,
             system=system,
             tools=TOOLS,
@@ -444,5 +459,6 @@ async def run_luna(business_id: str, usuario_id: str, user_message: str) -> dict
         (b.text for b in response.content if b.type == "text"),
         "Ação executada!"
     )
-    _save_conversation(business_id, usuario_id, messages)
+    if not ephemeral:
+        _save_conversation(business_id, usuario_id, messages)
     return {"response": final_text, "message_count": len(messages)}

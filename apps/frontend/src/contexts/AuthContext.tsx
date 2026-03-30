@@ -23,53 +23,31 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 const JWT_KEY = 'aa_jwt'
 
+// Login com Google desabilitado por enquanto — usuário dev automático
+const DEV_USUARIO: Usuario = {
+  id: 'dev-user-001',
+  nome: 'Dev User',
+  email: 'dev@local.dev',
+  telefone: null,
+  plano: 'pro',
+  role: 'admin',
+}
+
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
-  const [usuario, setUsuario] = useState<Usuario | null>(null)
-  const [token, setToken] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [usuario] = useState<Usuario | null>(DEV_USUARIO)
+  const [token] = useState<string | null>(null)
+  const [loading] = useState(false)
 
-  useEffect(() => {
-    const saved = localStorage.getItem(JWT_KEY)
-    if (saved) {
-      setToken(saved)
-      fetchMe(saved)
-        .then(setUsuario)
-        .catch(() => localStorage.removeItem(JWT_KEY))
-        .finally(() => setLoading(false))
-    } else {
-      setLoading(false)
-    }
-  }, [])
-
-  async function fetchMe(jwt: string): Promise<Usuario> {
-    const res = await fetch(`${API_BASE}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-    })
-    if (!res.ok) throw new Error('Unauthorized')
-    return res.json() as Promise<Usuario>
-  }
-
-  async function login(googleToken: string) {
-    const res = await fetch(`${API_BASE}/api/auth/google`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: googleToken }),
-    })
-    if (!res.ok) throw new Error('Login falhou')
-    const data = (await res.json()) as { access_token: string; usuario: Usuario }
-    localStorage.setItem(JWT_KEY, data.access_token)
-    setToken(data.access_token)
-    setUsuario(data.usuario)
+  async function login(_googleToken: string) {
+    // noop — login desabilitado
   }
 
   function logout() {
-    localStorage.removeItem(JWT_KEY)
-    setToken(null)
-    setUsuario(null)
+    // noop — login desabilitado
   }
 
   function authHeader(): Record<string, string> {
-    return token ? { Authorization: `Bearer ${token}` } : {}
+    return {}
   }
 
   return (

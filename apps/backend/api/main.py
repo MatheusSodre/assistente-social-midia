@@ -18,6 +18,8 @@ from .strategy.router import router as strategy_router
 from .agent.router import router as agent_router
 from .ads.router import router as ads_router
 from .designer.router import router as designer_router
+from .finance.router import router as finance_router
+from .agency.router import router as agency_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,10 +30,25 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Cria usuário dev se não existir (login desabilitado)
+    _ensure_dev_user()
     # Cria diretório de uploads local
     upload_dir = Path(os.getenv("UPLOAD_DIR", "/tmp/uploads"))
     upload_dir.mkdir(parents=True, exist_ok=True)
     yield
+
+
+def _ensure_dev_user():
+    from src.db.connection import get_connection
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM usuarios WHERE id = 'dev-user-001'")
+            if not cur.fetchone():
+                cur.execute(
+                    """INSERT INTO usuarios (id, nome, email, google_sub, plano, role)
+                       VALUES ('dev-user-001', 'Dev User', 'dev@local.dev', 'dev-local', 'profissional', 'admin')"""
+                )
+                print("✓ Usuário dev criado")
 
 
 app = FastAPI(
@@ -63,6 +80,8 @@ app.include_router(strategy_router)
 app.include_router(agent_router)
 app.include_router(ads_router)
 app.include_router(designer_router)
+app.include_router(finance_router)
+app.include_router(agency_router)
 
 
 @app.get("/health")

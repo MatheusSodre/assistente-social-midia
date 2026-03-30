@@ -150,7 +150,7 @@ export function CalendarPage() {
                           style={{
                             height: 100,
                             verticalAlign: 'top',
-                            background: isToday ? '#e8f4fd' : day ? '#fff' : '#f9f9f9',
+                            background: isToday ? 'rgba(111,66,193,0.1)' : day ? 'var(--bg-card)' : 'var(--bg-surface)',
                             cursor: day && selectedBusiness ? 'pointer' : 'default',
                           }}
                           onClick={() => {

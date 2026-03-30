@@ -24,17 +24,20 @@ IMAGE_SYSTEM = (
 )
 
 
-async def generate_image(visual_description: str, format: str = "post") -> bytes:
-    """Gera imagem via DALL-E 3 e retorna os bytes."""
+async def generate_image(visual_description: str, format: str = "post", brand_context: dict | None = None) -> bytes:
+    """Gera imagem via DALL-E 3 HD e retorna os bytes."""
     fmt = IMAGE_FORMATS.get(format, IMAGE_FORMATS["post"])
-    full_prompt = f"{IMAGE_SYSTEM}\n\n{visual_description}"
+
+    # Build prompt with brand context
+    from src.engines.image_engine.imagen_client import build_image_prompt
+    full_prompt = build_image_prompt(visual_description, format, brand_context)
 
     try:
         response = await client.images.generate(
             model="dall-e-3",
             prompt=full_prompt,
             size=fmt["size"],
-            quality="standard",
+            quality="hd",
             n=1,
             response_format="url",
         )

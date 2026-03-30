@@ -92,8 +92,8 @@ export function GeneratePage() {
               padding: '8px 12px',
               borderRadius: 10,
               border: `2px solid ${value === opt.value ? '#007bff' : '#dee2e6'}`,
-              background: value === opt.value ? '#e8f0fe' : '#fff',
-              color: value === opt.value ? '#0056b3' : '#555',
+              background: value === opt.value ? '#e8f0fe' : 'var(--bg-card)',
+              color: value === opt.value ? '#0056b3' : 'var(--text-primary)',
               fontWeight: value === opt.value ? 700 : 400,
               fontSize: 13,
               cursor: 'pointer',
@@ -319,7 +319,7 @@ export function GeneratePage() {
                     </div>
                     <div
                       className="p-3 rounded"
-                      style={{ background: '#f8f9fa', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
+                      style={{ background: 'var(--bg-surface)', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
                     >
                       {result.caption}
                     </div>
@@ -361,7 +361,7 @@ export function GeneratePage() {
 
             <div
               className="card-footer d-flex align-items-center justify-content-between"
-              style={{ background: '#f8f9fa', borderTop: '1px solid #e9ecef' }}
+              style={{ background: 'var(--bg-surface)', borderTop: '1px solid #e9ecef' }}
             >
               <span className="small text-muted">
                 <i className="fas fa-clock mr-1" />Aguardando aprovação

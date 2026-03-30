@@ -4,12 +4,22 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
-bearer = HTTPBearer()
+bearer = HTTPBearer(auto_error=False)
+
+DEV_USER = {
+    "sub": "dev-user-001",
+    "nome": "Dev User",
+    "email": "dev@local.dev",
+}
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
 ) -> dict:
+    # Sem token → retorna usuário dev (login desabilitado por enquanto)
+    if credentials is None:
+        return DEV_USER
+
     token = credentials.credentials
     secret = os.getenv("JWT_SECRET", "change-me")
 

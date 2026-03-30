@@ -11,6 +11,7 @@ from typing import Any
 import anthropic
 
 from src.db.connection import get_connection
+from src.engines.brand_context import get_unified_brand_context, brand_context_to_prompt
 from src.engines.image_engine.composer import (
     remove_background,
     add_text_overlay,
@@ -22,20 +23,34 @@ logger = logging.getLogger(__name__)
 
 _client = anthropic.Anthropic()
 
-PIXEL_SYSTEM = """Você é Pixel, especialista em design visual e identidade de marca para redes sociais.
-Você é criativa, tem olhar estético apurado e fala português brasileiro de forma clara e inspiradora.
-Você ajuda a criar, editar e refinar imagens para posts do Instagram com a identidade visual da empresa.
+MODEL_SMART = "claude-haiku-4-5-20251001"
+MODEL_FAST = "claude-haiku-4-5-20251001"
 
-Suas capacidades:
-- Remover fundo de imagens enviadas pelo usuário
-- Adicionar texto/legenda sobre imagens com estilo da marca
-- Aplicar a cor de fundo da marca sobre imagens com fundo removido
-- Salvar e consultar a identidade visual (cores, fontes, estilo) da marca
-- Orientar sobre paleta de cores, tipografia e estilo visual
+PIXEL_SYSTEM = """Você é Pixel, Designer Visual e especialista em identidade de marca.
 
-Sempre pergunte sobre a identidade visual da marca antes de editar, se não souber.
-Quando receber uma imagem, descreva o que você vê e sugira o que pode ser feito com ela.
-Após cada edição, mostre o resultado e pergunte se quer ajustes.
+QUEM VOCÊ É:
+Formada em Design Gráfico com pós em Branding, você trabalha há 8 anos criando identidades visuais para marcas nas redes sociais. Você tem um olhar estético apurado e consegue traduzir a essência de uma marca em elementos visuais — cores, tipografia, composição. Você é a pessoa que faz uma imagem "ter a cara" da marca.
+
+SUA PERSONALIDADE:
+- Visual e descritiva: você "pensa em imagens" e descreve o que vê com riqueza de detalhes
+- Perfeccionista com bom senso: busca qualidade mas sabe que feito é melhor que perfeito
+- Consultiva: não só executa, mas explica por que certas escolhas visuais funcionam melhor
+- Inspiradora: traz referências, sugere estilos, mostra possibilidades que o cliente não imaginou
+
+COMO TRABALHAR:
+- Quando receber uma imagem, descreva o que vê e sugira 2-3 coisas que pode fazer com ela
+- Sempre consulte a identidade visual da marca (get_visual_identity) antes de editar
+- Ao editar, explique o que fez e por quê: "Usei a cor primária da marca como fundo para manter a consistência visual"
+- Se a marca não tem identidade visual definida, ofereça ajudar a definir uma paleta e estilo
+- Após cada edição, pergunte: "Ficou do jeito que imaginava? Quer algum ajuste?"
+
+SUAS FERRAMENTAS:
+- Remover fundo de imagens
+- Adicionar texto/legenda com estilo da marca
+- Aplicar cor de fundo da marca
+- Consultar e salvar identidade visual (cores, fontes, estilo)
+
+Fale português brasileiro de forma criativa e acessível. Use termos de design quando relevante mas sempre explique de forma simples.
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -219,7 +234,7 @@ def _load_conversation(business_id: str) -> list[dict]:
 
 
 def _save_conversation(business_id: str, usuario_id: str, messages: list[dict]) -> None:
-    trimmed = messages[-40:] if len(messages) > 40 else messages
+    trimmed = messages[-20:] if len(messages) > 20 else messages
     msgs_json = json.dumps(trimmed, ensure_ascii=False, default=str)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -252,15 +267,18 @@ async def run_pixel(
     usuario_id: str,
     user_message: str,
     image_bytes: bytes | None = None,
+    ephemeral: bool = False,
 ) -> dict[str, Any]:
     """
     Loop agêntico do Pixel. Aceita mensagem + imagem opcional.
+    Se ephemeral=True, não carrega nem salva histórico (delegação da Sofia).
     """
     # current_image_bytes persists across tool calls within this invocation
     current_image_bytes = image_bytes
 
     identity = _get_identity(business_id)
-    history = _load_conversation(business_id)
+    brand_ctx = get_unified_brand_context(business_id)
+    history = [] if ephemeral else _load_conversation(business_id)
 
     # Build user message content
     if image_bytes:
@@ -280,29 +298,17 @@ async def run_pixel(
 
     history.append({"role": "user", "content": user_content})
 
-    # Build system with identity context
-    system = PIXEL_SYSTEM
-    if identity.get("found"):
-        system += f"\n\nIdentidade visual atual da marca:\n"
-        system += f"- Cor primária: {identity.get('primary_color')}\n"
-        system += f"- Cor secundária: {identity.get('secondary_color')}\n"
-        system += f"- Cor de acento: {identity.get('accent_color')}\n"
-        system += f"- Cor de fundo: {identity.get('background_color')}\n"
-        system += f"- Cor de texto: {identity.get('text_color')}\n"
-        system += f"- Fonte heading: {identity.get('font_heading')}\n"
-        system += f"- Fonte body: {identity.get('font_body')}\n"
-        if identity.get("style_description"):
-            system += f"- Estilo: {identity['style_description']}\n"
-        if identity.get("extra_context"):
-            system += f"- Contexto extra: {identity['extra_context']}\n"
+    # Build system with full brand context (strategy + visual identity)
+    system = PIXEL_SYSTEM + brand_context_to_prompt(brand_ctx)
 
     messages = list(history)
-    max_iterations = 8
+    max_iterations = 6
     response = None
 
-    for _ in range(max_iterations):
+    for iteration in range(max_iterations):
+        model = MODEL_SMART if iteration == 0 else MODEL_FAST
         response = _client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=2048,
             system=system,
             tools=TOOLS,
@@ -393,7 +399,8 @@ async def run_pixel(
         else:
             clean_messages.append(m)
 
-    _save_conversation(business_id, usuario_id, clean_messages)
+    if not ephemeral:
+        _save_conversation(business_id, usuario_id, clean_messages)
 
     return {
         "response": final_text or "Pronto!",

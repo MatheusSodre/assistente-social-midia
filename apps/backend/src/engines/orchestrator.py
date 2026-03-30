@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from src.db.connection import get_connection
+from src.engines.brand_context import get_unified_brand_context
 from src.engines.script_engine.claude_client import generate_post_script
 from src.engines.image_engine.imagen_client import generate_image_gemini as generate_image
 from src.engines.image_engine.storage import upload_image
@@ -40,12 +41,14 @@ async def generate_content(
     )
     logger.info({"event": "script_generated", "draft_id": draft_id})
 
-    # 2. Gera imagem via DALL-E (com fallback)
+    # 2. Gera imagem com brand context para qualidade máxima
+    brand_ctx = get_unified_brand_context(business_id)
     image_url = None
     try:
         image_bytes = await generate_image(
             visual_description=script.get("visual_description", objective),
             format=format,
+            brand_context=brand_ctx,
         )
         image_url = await upload_image(image_bytes, format)
         logger.info({"event": "image_generated", "draft_id": draft_id, "url": image_url})

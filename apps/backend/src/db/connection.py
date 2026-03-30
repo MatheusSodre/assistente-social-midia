@@ -5,7 +5,7 @@ import pymysql
 import pymysql.cursors
 from dotenv import load_dotenv
 
-from .schema import SCHEMA
+from .schema import SCHEMA, MIGRATIONS
 
 load_dotenv()
 
@@ -33,10 +33,22 @@ def get_connection():
 
 
 def init_db() -> None:
-    """Executa o DDL completo. Chamado no startup da aplicação."""
+    """Executa o DDL completo + migrations. Chamado no startup da aplicação."""
     statements = [s.strip() for s in SCHEMA.split(";") if s.strip()]
     with get_connection() as conn:
         with conn.cursor() as cur:
             for stmt in statements:
                 cur.execute(stmt)
+
+    # Migrations para adicionar colunas em bancos existentes
+    if MIGRATIONS:
+        migration_stmts = [s.strip() for s in MIGRATIONS.split(";") if s.strip()]
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for stmt in migration_stmts:
+                    try:
+                        cur.execute(stmt)
+                    except Exception:
+                        pass  # coluna já existe ou statement irrelevante
+
     print("✓ Banco inicializado")

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth.dependencies import get_current_user
 from src.db.connection import get_connection
+from src.engines.brand_context import get_unified_brand_context
 from src.engines.orchestrator import generate_content
 from src.engines.image_engine.imagen_client import generate_image_gemini
 from src.engines.image_engine.storage import upload_image
@@ -28,6 +29,14 @@ async def generate(data: ContentGenerateRequest, user=Depends(get_current_user))
     if not business:
         raise HTTPException(404, "Business não encontrado")
 
+    # Load brand context for better image generation
+    brand_ctx = get_unified_brand_context(data.business_id)
+    strategy = brand_ctx.get("strategy", {})
+    vi = brand_ctx.get("visual_identity", {})
+    enriched_strategy = dict(strategy) if strategy else {}
+    if vi:
+        enriched_strategy["visual_identity"] = vi
+
     draft = await generate_content(
         business_id=data.business_id,
         business_name=business["name"],
@@ -36,6 +45,7 @@ async def generate(data: ContentGenerateRequest, user=Depends(get_current_user))
         format=data.format,
         tone=data.tone,
         audience=data.audience,
+        brand_strategy=enriched_strategy if enriched_strategy else None,
     )
     return draft
 
@@ -104,7 +114,7 @@ async def generate_image_for_draft(draft_id: str, user=Depends(get_current_user)
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT cd.id, cd.format, cd.visual_description, cd.caption
+                SELECT cd.id, cd.business_id, cd.format, cd.visual_description, cd.caption
                 FROM content_drafts cd
                 JOIN businesses b ON b.id = cd.business_id
                 WHERE cd.id = %s AND b.usuario_id = %s
@@ -120,8 +130,9 @@ async def generate_image_for_draft(draft_id: str, user=Depends(get_current_user)
     if not description:
         raise HTTPException(400, "Draft não possui descrição visual para gerar imagem")
 
+    brand_ctx = get_unified_brand_context(row["business_id"])
     try:
-        image_bytes = await generate_image_gemini(description, row["format"])
+        image_bytes = await generate_image_gemini(description, row["format"], brand_context=brand_ctx)
         image_url = await upload_image(image_bytes, row["format"])
     except ValueError as e:
         raise HTTPException(400, str(e))

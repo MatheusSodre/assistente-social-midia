@@ -54,24 +54,55 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120_000) // 2 min timeout
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+    }
+    return res.json()
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      throw new Error('A requisição demorou demais. Tente novamente.')
+    }
+    throw e
+  } finally {
+    clearTimeout(timeout)
   }
-  return res.json()
 }
 
 export const api = {
   // Businesses
   listBusinesses: () => request<Business[]>('GET', '/api/v1/businesses'),
-  createBusiness: (data: { name: string; type: string; brand_context?: Record<string, unknown> }) =>
-    request<Business>('POST', '/api/v1/businesses', data),
+  getBusiness: (id: string) => request<Business>('GET', `/api/v1/businesses/${id}`),
+  createBusiness: (data: Partial<Business>) =>
+    request<{ id: string; name: string; type: string }>('POST', '/api/v1/businesses', data),
+  updateBusiness: (id: string, data: Partial<Business>) =>
+    request<{ message: string; updated_fields: string[] }>('PUT', `/api/v1/businesses/${id}`, data),
+  deleteBusiness: (id: string) =>
+    request<{ message: string }>('DELETE', `/api/v1/businesses/${id}`),
+  getReadiness: (id: string) => request<ReadinessResponse>('GET', `/api/v1/businesses/${id}/readiness`),
+  analyzeUrl: (id: string, url: string) =>
+    request<{ extracted: Record<string, unknown>; readiness: ReadinessResponse }>('POST', `/api/v1/businesses/${id}/analyze-url`, { url }),
+  uploadDocument: async (businessId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const token = localStorage.getItem('aa_jwt')
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(`${API_BASE}/api/v1/businesses/${businessId}/upload-document`, { method: 'POST', headers, body: form })
+    if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.detail || err.error || `HTTP ${res.status}`) }
+    return res.json() as Promise<{ extracted: Record<string, unknown>; readiness: ReadinessResponse }>
+  },
   connectInstagram: (businessId: string, data: { instagram_account_id: string; access_token: string }) =>
     request('POST', `/api/v1/businesses/${businessId}/connect-instagram`, data),
 
@@ -116,6 +147,14 @@ export const api = {
   agentClearHistory: (businessId: string) =>
     request('DELETE', `/api/v1/agent/history/${businessId}`),
 
+  // Agency (Sofia)
+  agencyChat: (data: { business_id: string; message: string }) =>
+    request<AgencyChatResponse>('POST', '/api/v1/agency/chat', data),
+  agencyHistory: (businessId: string) =>
+    request<AgentHistoryResponse>('GET', `/api/v1/agency/history/${businessId}`),
+  agencyClearHistory: (businessId: string) =>
+    request('DELETE', `/api/v1/agency/history/${businessId}`),
+
   // Google Ads / Luna
   getAdsAccount: (businessId: string) =>
     request<AdsAccount>('GET', `/api/v1/ads/account/${businessId}`),
@@ -129,6 +168,30 @@ export const api = {
     request<AgentHistoryResponse>('GET', `/api/v1/ads/history/${businessId}`),
   lunaClearHistory: (businessId: string) =>
     request('DELETE', `/api/v1/ads/history/${businessId}`),
+
+  // Finance
+  financeConnectToken: () =>
+    request<{ connect_token: string }>('POST', '/api/v1/finance/connect-token'),
+  financeCreateConnection: (data: { item_id: string; connector_name?: string }) =>
+    request<FinanceConnection>('POST', '/api/v1/finance/connections', data),
+  financeListConnections: () =>
+    request<FinanceConnection[]>('GET', '/api/v1/finance/connections'),
+  financeDeleteConnection: (id: string) =>
+    request<{ message: string }>('DELETE', `/api/v1/finance/connections/${id}`),
+  financeTransactions: (params?: { days?: number; tipo?: string; categoria?: string; busca?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.days) qs.set('days', String(params.days))
+    if (params?.tipo) qs.set('tipo', params.tipo)
+    if (params?.categoria) qs.set('categoria', params.categoria)
+    if (params?.busca) qs.set('busca', params.busca)
+    return request<FinanceTransaction[]>('GET', `/api/v1/finance/transactions?${qs}`)
+  },
+  financeSync: () =>
+    request<{ synced: number; errors: string[] }>('POST', '/api/v1/finance/sync'),
+  financeAnalysis: () =>
+    request<FinanceAnalysis>('GET', '/api/v1/finance/analysis'),
+  financeAlerts: (days_ahead?: number) =>
+    request<FinanceAlert[]>('GET', `/api/v1/finance/alerts${days_ahead ? `?days_ahead=${days_ahead}` : ''}`),
 
   // Designer / Pixel
   designerChat: async (data: { business_id: string; message: string; image?: File }) => {
@@ -156,9 +219,25 @@ export interface Business {
   id: string
   name: string
   type: string
+  description?: string
+  location?: string
+  website_url?: string
+  instagram_handle?: string
+  linkedin_url?: string
+  services?: string[] | string
+  target_audience?: string
+  differentials?: string
   instagram_account_id?: string
   brand_context?: Record<string, unknown>
   criado_em: string
+}
+
+export interface ReadinessResponse {
+  score: number
+  ready: boolean
+  missing: Array<{ field: string; label: string; weight: number }>
+  total_fields: number
+  filled_fields: number
 }
 
 export interface ContentDraft {
@@ -256,6 +335,12 @@ export interface AgentChatResponse {
   message_count: number
 }
 
+export interface AgencyChatResponse {
+  response: string
+  steps: Array<{ agent: string; action: string; status: string }>
+  message_count: number
+}
+
 export interface AgentHistoryResponse {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
   business_id: string
@@ -281,6 +366,44 @@ export interface DesignerChatResponse {
   response: string
   image_url?: string
   message_count: number
+}
+
+export interface FinanceConnection {
+  id: string
+  item_id: string
+  connector_name?: string
+  status: 'updating' | 'updated' | 'error'
+  last_synced_at?: string
+  created_at: string
+}
+
+export interface FinanceTransaction {
+  id: string
+  connection_id: string
+  pluggy_id?: string
+  account_id?: string
+  date?: string
+  description?: string
+  amount?: number
+  type?: 'CREDIT' | 'DEBIT'
+  category?: string
+  status: 'PENDING' | 'POSTED'
+}
+
+export interface FinanceAnalysis {
+  summary: string
+  top_categories: Array<{ category: string; total: number; count: number; percentage: number }>
+  insights: string[]
+  recommendations: string[]
+}
+
+export interface FinanceAlert {
+  id: string
+  description: string
+  amount?: number
+  date?: string
+  days_until_due: number
+  account_id?: string
 }
 
 export interface VisualIdentity {

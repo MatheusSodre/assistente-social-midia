@@ -11,6 +11,9 @@ import { CalendarPage } from '../pages/CalendarPage'
 import { StrategyPage } from '../pages/StrategyPage'
 import { AdsPage } from '../pages/AdsPage'
 import { DesignerPage } from '../pages/DesignerPage'
+import { FinancePage } from '../pages/FinancePage'
+import { AgencyPage } from '../pages/AgencyPage'
+import { OnboardingPage } from '../pages/OnboardingPage'
 import { api } from '../services/api'
 
 export function AdminLTELayout() {
@@ -18,6 +21,7 @@ export function AdminLTELayout() {
   const [modulo, setModulo] = useState<Module>('home')
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
   const [pendingCount, setPendingCount] = useState(0)
+  const [onboardingBusinessId, setOnboardingBusinessId] = useState('')
 
   useEffect(() => {
     const classes = 'hold-transition sidebar-mini layout-fixed' + (darkMode ? ' dark-mode' : '')
@@ -37,29 +41,42 @@ export function AdminLTELayout() {
     return () => clearInterval(timer)
   }, [])
 
-  const navigate = (m: Module) => {
+  const navigate = (m: Module, data?: { businessId?: string }) => {
+    if (m === 'onboarding' && data?.businessId) {
+      setOnboardingBusinessId(data.businessId)
+    }
     setModulo(m)
     if (m === 'dashboard') setPendingCount(0)
   }
 
   // Evento global de navegação (usado por páginas filhas)
   useEffect(() => {
-    const handler = (e: Event) => navigate((e as CustomEvent).detail as Module)
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (typeof detail === 'string') {
+        navigate(detail as Module)
+      } else if (detail?.module) {
+        navigate(detail.module as Module, detail)
+      }
+    }
     window.addEventListener('navigate', handler)
     return () => window.removeEventListener('navigate', handler)
   }, [])
 
   const PAGE_TITLES: Record<Module, string> = {
     home: 'Início',
-    dashboard: 'Aprovação de Conteúdo',
-    generate: 'Gerar Conteúdo',
-    businesses: 'Meus Businesses',
-    history: 'Histórico de Posts',
-    agent: 'Agente Social — Mara',
-    calendar: 'Calendário Editorial',
-    strategy: 'Estratégia de Marca',
-    ads: 'Google Ads — Luna',
-    designer: 'Designer Visual — Pixel',
+    agency: 'Criar Conteúdo',
+    dashboard: 'Revisar & Aprovar',
+    generate: 'Gerar Rápido',
+    businesses: 'Meus Negócios',
+    history: 'Histórico',
+    agent: 'Social Media',
+    calendar: 'Calendário',
+    strategy: 'Estratégia & Marca',
+    ads: 'Google Ads',
+    designer: 'Designer Visual',
+    finance: 'Financeiro',
+    onboarding: 'Configurar Negócio',
   }
 
   function renderModulo() {
@@ -74,6 +91,9 @@ export function AdminLTELayout() {
       case 'strategy':  return <StrategyPage />
       case 'ads':       return <AdsPage />
       case 'designer':  return <DesignerPage />
+      case 'finance':   return <FinancePage />
+      case 'agency':    return <AgencyPage />
+      case 'onboarding': return <OnboardingPage businessId={onboardingBusinessId} onComplete={() => navigate('agency')} />
       default:          return <AdminLTEHome onNavigate={navigate} />
     }
   }
@@ -231,22 +251,51 @@ export function AdminLTELayout() {
             <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
               <NavItem m="home" icon="fas fa-home" label="Início" />
 
-              <li className="nav-header">CONTEÚDO</li>
-              <NavItem m="dashboard" icon="fas fa-tasks" label="Aprovação" badge={pendingCount} />
-              <NavItem m="generate" icon="fas fa-magic" label="Gerar com IA" />
+              {/* Ação principal — destaque visual */}
+              <li className="nav-item">
+                <a
+                  href="#"
+                  className={`nav-link ${modulo === 'agency' ? 'active' : ''}`}
+                  onClick={e => { e.preventDefault(); navigate('agency') }}
+                  style={modulo === 'agency'
+                    ? { background: '#6f42c1' }
+                    : { background: 'rgba(111,66,193,0.15)', borderLeft: '3px solid #6f42c1' }}
+                >
+                  <i className="nav-icon fas fa-magic" style={{ color: modulo === 'agency' ? '#fff' : '#6f42c1' }} />
+                  <p style={{ fontWeight: 600, color: modulo === 'agency' ? '#fff' : '#c2c7d0' }}>Criar Conteúdo</p>
+                </a>
+              </li>
 
-              <li className="nav-header">AGENTES IA</li>
-              <NavItem m="agent" icon="fas fa-robot" label="Mara — Social" />
-              <NavItem m="designer" icon="fas fa-palette" label="Pixel — Designer" />
-              <NavItem m="ads" icon="fab fa-google" label="Luna — Google Ads" />
-
-              <li className="nav-header">PLANEJAMENTO</li>
+              <NavItem m="dashboard" icon="fas fa-check-double" label="Revisar & Aprovar" badge={pendingCount} />
               <NavItem m="calendar" icon="fas fa-calendar-alt" label="Calendário" />
-              <NavItem m="strategy" icon="fas fa-chess" label="Estratégia" />
-
-              <li className="nav-header">GESTÃO</li>
-              <NavItem m="businesses" icon="fas fa-building" label="Businesses" />
               <NavItem m="history" icon="fas fa-history" label="Histórico" />
+
+              {/* Configurações — colapsável */}
+              <li className={`nav-item has-treeview ${['strategy', 'businesses', 'finance'].includes(modulo) ? 'menu-open' : ''}`}>
+                <a href="#" className="nav-link" onClick={e => e.preventDefault()}>
+                  <i className="nav-icon fas fa-cog" />
+                  <p>Configurações <i className="fas fa-angle-left right" /></p>
+                </a>
+                <ul className="nav nav-treeview">
+                  <NavItem m="strategy" icon="fas fa-chess" label="Estratégia & Marca" />
+                  <NavItem m="businesses" icon="fas fa-building" label="Meus Negócios" />
+                  <NavItem m="finance" icon="fas fa-wallet" label="Financeiro" />
+                </ul>
+              </li>
+
+              {/* Especialistas — colapsável */}
+              <li className={`nav-item has-treeview ${['agent', 'designer', 'ads', 'generate'].includes(modulo) ? 'menu-open' : ''}`}>
+                <a href="#" className="nav-link" onClick={e => e.preventDefault()}>
+                  <i className="nav-icon fas fa-users-cog" />
+                  <p>Especialistas <i className="fas fa-angle-left right" /></p>
+                </a>
+                <ul className="nav nav-treeview">
+                  <NavItem m="agent" icon="fas fa-share-alt" label="Social Media" />
+                  <NavItem m="designer" icon="fas fa-palette" label="Designer Visual" />
+                  <NavItem m="ads" icon="fas fa-ad" label="Google Ads" />
+                  <NavItem m="generate" icon="fas fa-bolt" label="Gerar Rápido" />
+                </ul>
+              </li>
             </ul>
           </nav>
         </div>

@@ -1,3 +1,6 @@
+"""
+Image Generation — Gemini 3.1 Flash com prompts profissionais e brand context.
+"""
 import os
 import logging
 import asyncio
@@ -14,12 +17,6 @@ _client: genai.Client | None = None
 
 MODEL = "gemini-3.1-flash-image-preview"
 
-IMAGE_PREFIX = (
-    "Professional marketing photo for Brazilian business, "
-    "high quality, clean modern aesthetic, no text overlays, "
-    "commercial photography, well-lit, sharp. "
-)
-
 
 def _get_client() -> genai.Client:
     global _client
@@ -31,9 +28,46 @@ def _get_client() -> genai.Client:
     return _client
 
 
-async def generate_image_gemini(visual_description: str, format: str = "post") -> bytes:
-    """Gera imagem via gemini-2.0-flash-preview-image-generation e retorna bytes."""
-    prompt = IMAGE_PREFIX + visual_description
+def build_image_prompt(
+    visual_description: str,
+    format: str = "post",
+    brand_context: dict | None = None,
+) -> str:
+    """Constrói prompt profissional com brand context."""
+    parts = [visual_description.strip()]
+
+    if brand_context:
+        vi = brand_context.get("visual_identity", {})
+        colors = []
+        if vi.get("primary_color"):
+            colors.append(vi["primary_color"])
+        if vi.get("secondary_color"):
+            colors.append(vi["secondary_color"])
+        if vi.get("accent_color"):
+            colors.append(vi["accent_color"])
+        if colors:
+            parts.append(f"Color palette: {', '.join(colors)}.")
+        if vi.get("style_description"):
+            parts.append(f"Brand style: {vi['style_description']}.")
+
+    desc_lower = visual_description.lower()
+    if "8k" not in desc_lower and "high resolution" not in desc_lower:
+        parts.append("8K resolution, ultra-detailed, professional color grading.")
+    if "no text" not in desc_lower:
+        parts.append("No text, no watermarks, no logos, no graphic overlays.")
+    if "photorealistic" not in desc_lower and "photograph" not in desc_lower:
+        parts.append("Photorealistic, commercial advertising quality.")
+
+    return " ".join(parts)
+
+
+async def generate_image_gemini(
+    visual_description: str,
+    format: str = "post",
+    brand_context: dict | None = None,
+) -> bytes:
+    """Gera imagem via Gemini 3.1 Flash. Retorna bytes."""
+    prompt = build_image_prompt(visual_description, format, brand_context)
 
     logger.info({"event": "gemini_image_request", "model": MODEL, "format": format})
 

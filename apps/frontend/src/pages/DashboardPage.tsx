@@ -30,64 +30,84 @@ interface DraftModalProps {
 
 function DraftModal({ draft, actionLoading, onApprove, onReject, onPublish, onClose }: DraftModalProps) {
   const busy = !!actionLoading
+  const isStory = draft.format === 'story' || draft.format === 'reel'
 
   return (
     <div
-      className="modal fade show"
-      style={{ display: 'block', background: 'rgba(0,0,0,0.6)', zIndex: 1050 }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1050,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="modal-dialog modal-dialog-scrollable" style={{ maxWidth: 480 }}>
-        <div className="modal-content" style={{ borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 24, maxHeight: '90vh', maxWidth: 920 }}>
 
-          {/* Header estilo Instagram */}
-          <div className="modal-header py-2 px-3" style={{ borderBottom: '1px solid #efefef' }}>
-            <div className="d-flex align-items-center" style={{ gap: 10 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16,
-              }}>
-                <i className="fab fa-instagram" />
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{draft.business_name}</div>
-                <div style={{ fontSize: 11, color: '#8e8e8e' }}>
-                  <FormatBadge format={draft.format} />
-                </div>
-              </div>
-            </div>
-            <button type="button" className="close" style={{ marginLeft: 'auto' }} onClick={onClose}>&times;</button>
+        {/* Phone Mockup — cores forçadas para evitar dark mode */}
+        <div style={{
+          width: 375, minWidth: 375, background: '#ffffff', color: '#262626',
+          borderRadius: 40, border: '6px solid #1a1a1a', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', maxHeight: '85vh',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        }}>
+          {/* Notch */}
+          <div style={{ background: '#1a1a1a', height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ width: 80, height: 20, background: '#000', borderRadius: 10 }} />
           </div>
 
-          <div className="modal-body p-0" style={{ overflowY: 'auto', maxHeight: '75vh' }}>
-            {/* Imagem quadrada */}
+          {/* Instagram Header */}
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #efefef', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: '#fff' }}>
+            <span style={{ fontWeight: 700, fontSize: 18, fontFamily: 'cursive', color: '#262626' }}>Instagram</span>
+            <div style={{ display: 'flex', gap: 16, fontSize: 18, color: '#262626' }}>
+              <i className="far fa-heart" />
+              <i className="far fa-paper-plane" />
+            </div>
+          </div>
+
+          {/* Post Content — scrollable */}
+          <div style={{ flex: 1, overflowY: 'auto', background: '#fff' }}>
+            {/* Profile row */}
+            <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0,
+              }}>
+                {(draft.business_name || 'B')[0].toUpperCase()}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: '#262626' }}>{draft.business_name}</div>
+                <div style={{ fontSize: 10, color: '#8e8e8e' }}>Patrocinado</div>
+              </div>
+              <div style={{ marginLeft: 'auto', fontSize: 16, color: '#262626' }}>...</div>
+            </div>
+
+            {/* Image — contain para mostrar completa, sem cortar */}
             {draft.image_url ? (
-              <div style={{ width: '100%', aspectRatio: '1/1', background: '#000', overflow: 'hidden' }}>
+              <div style={{ width: '100%', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <img
                   src={imgSrc(draft.image_url)}
                   alt="Preview"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  style={{ width: '100%', maxHeight: isStory ? 500 : 375, objectFit: 'contain', display: 'block' }}
                 />
               </div>
             ) : (
-              <div className="d-flex align-items-center justify-content-center bg-light" style={{ aspectRatio: '1/1' }}>
-                <span className="text-muted small text-center">
-                  <i className="fas fa-image fa-2x d-block mb-1" />Sem imagem
-                </span>
+              <div style={{ width: '100%', height: 300, background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ color: '#c7c7c7', fontSize: 14 }}><i className="fas fa-image fa-2x" /></span>
               </div>
             )}
 
-            {/* Ações estilo Instagram */}
-            <div className="px-3 pt-2 pb-1 d-flex" style={{ gap: 14, fontSize: 22 }}>
-              <i className="far fa-heart" style={{ cursor: 'default', color: '#262626' }} />
-              <i className="far fa-comment" style={{ cursor: 'default', color: '#262626' }} />
-              <i className="far fa-paper-plane" style={{ cursor: 'default', color: '#262626' }} />
+            {/* Action icons */}
+            <div style={{ padding: '10px 12px 4px', display: 'flex', gap: 14, fontSize: 22, background: '#fff' }}>
+              <i className="far fa-heart" style={{ color: '#262626' }} />
+              <i className="far fa-comment" style={{ color: '#262626', transform: 'scaleX(-1)' }} />
+              <i className="far fa-paper-plane" style={{ color: '#262626' }} />
+              <i className="far fa-bookmark" style={{ color: '#262626', marginLeft: 'auto' }} />
             </div>
 
-            {/* Caption + hashtags */}
-            <div className="px-3 pb-3">
-              <p style={{ fontSize: 14, lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>
-                <span style={{ fontWeight: 600, marginRight: 6 }}>{draft.business_name}</span>
+            {/* Caption — cores forçadas escuras */}
+            <div style={{ padding: '0 12px 12px', background: '#fff' }}>
+              <p style={{ fontSize: 13, lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#262626' }}>
+                <span style={{ fontWeight: 600, marginRight: 5, color: '#262626' }}>{draft.business_name?.toLowerCase().replace(/\s+/g, '')}</span>
                 {draft.caption}
               </p>
               {draft.hashtags?.length > 0 && (
@@ -95,45 +115,97 @@ function DraftModal({ draft, actionLoading, onApprove, onReject, onPublish, onCl
                   {draft.hashtags.map(h => `#${h}`).join(' ')}
                 </p>
               )}
-              {draft.best_posting_time && (
-                <p style={{ fontSize: 11, color: '#8e8e8e', marginTop: 6, marginBottom: 0 }}>
-                  <i className="fas fa-clock mr-1" />Melhor horário: {draft.best_posting_time}
-                </p>
-              )}
+              <p style={{ fontSize: 10, color: '#8e8e8e', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                2 horas atrás
+              </p>
             </div>
           </div>
 
-          <div className="modal-footer justify-content-between">
-            <button className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={() => onReject(draft.id)}
-                disabled={busy}
-              >
-                {actionLoading === draft.id + '_reject'
-                  ? <span className="spinner-border spinner-border-sm" />
-                  : <><i className="fas fa-times mr-1" />Rejeitar</>}
-              </button>
-              <button
-                className="btn btn-success btn-sm"
-                onClick={() => onApprove(draft.id)}
-                disabled={busy}
-              >
-                {actionLoading === draft.id
-                  ? <span className="spinner-border spinner-border-sm" />
-                  : <><i className="fas fa-check mr-1" />Aprovar</>}
-              </button>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => onPublish(draft.id)}
-                disabled={busy}
-              >
-                {actionLoading === draft.id + '_publish'
-                  ? <span className="spinner-border spinner-border-sm" />
-                  : <><i className="fas fa-paper-plane mr-1" />Publicar agora</>}
-              </button>
+          {/* Bottom bar */}
+          <div style={{ height: 4, background: '#1a1a1a', margin: '0 auto 8px', width: 120, borderRadius: 2, flexShrink: 0 }} />
+        </div>
+
+        {/* Side Panel — Actions + Metadata */}
+        <div style={{
+          width: 300, background: 'var(--bg-card)', borderRadius: 16, padding: 24,
+          display: 'flex', flexDirection: 'column', gap: 16,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+          overflowY: 'auto', color: 'var(--text-primary)',
+        }}>
+          <div>
+            <h5 style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: 'var(--text-primary)' }}>Preview do Post</h5>
+            <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0 }}>
+              Veja como ficará no Instagram antes de aprovar
+            </p>
+          </div>
+
+          {/* Metadata */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="d-flex align-items-center" style={{ gap: 8 }}>
+              <FormatBadge format={draft.format} />
+              <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{draft.business_name}</span>
             </div>
+            {draft.best_posting_time && (
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                <i className="fas fa-clock mr-2" style={{ color: 'var(--text-muted)' }} />
+                Melhor horário: <strong>{draft.best_posting_time}</strong>
+              </div>
+            )}
+            {draft.call_to_action && (
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                <i className="fas fa-bullhorn mr-2" style={{ color: 'var(--text-muted)' }} />
+                CTA: {draft.call_to_action}
+              </div>
+            )}
+            {draft.visual_description && (
+              <details style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                <summary style={{ cursor: 'pointer' }}>Prompt da imagem</summary>
+                <p style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{draft.visual_description}</p>
+              </details>
+            )}
+          </div>
+
+          <hr style={{ margin: '4px 0' }} />
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto' }}>
+            <button
+              className="btn btn-success btn-lg btn-block"
+              style={{ borderRadius: 10, fontWeight: 600, fontSize: 15 }}
+              onClick={() => onApprove(draft.id)}
+              disabled={busy}
+            >
+              {actionLoading === draft.id
+                ? <span className="spinner-border spinner-border-sm" />
+                : <><i className="fas fa-check mr-2" />Aprovar</>}
+            </button>
+            <button
+              className="btn btn-primary btn-block"
+              style={{ borderRadius: 10, fontWeight: 600, fontSize: 14 }}
+              onClick={() => onPublish(draft.id)}
+              disabled={busy}
+            >
+              {actionLoading === draft.id + '_publish'
+                ? <span className="spinner-border spinner-border-sm" />
+                : <><i className="fas fa-paper-plane mr-2" />Publicar agora</>}
+            </button>
+            <button
+              className="btn btn-outline-danger btn-block"
+              style={{ borderRadius: 10, fontSize: 14 }}
+              onClick={() => onReject(draft.id)}
+              disabled={busy}
+            >
+              {actionLoading === draft.id + '_reject'
+                ? <span className="spinner-border spinner-border-sm" />
+                : <><i className="fas fa-times mr-2" />Rejeitar</>}
+            </button>
+            <button
+              className="btn btn-outline-secondary btn-block"
+              style={{ borderRadius: 10, fontSize: 13 }}
+              onClick={onClose}
+            >
+              Fechar
+            </button>
           </div>
         </div>
       </div>
@@ -250,16 +322,16 @@ export function DashboardPage() {
                   onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)')}
                   onMouseLeave={e => (e.currentTarget.style.boxShadow = '')}
                 >
-                  {/* Imagem */}
+                  {/* Imagem — contain para ver completa */}
                   {draft.image_url ? (
-                    <div style={{ position: 'relative', paddingTop: draft.format === 'story' ? '75%' : '56%', overflow: 'hidden', background: '#000' }}>
+                    <div style={{ position: 'relative', paddingTop: '100%', overflow: 'hidden', background: 'var(--bg-surface)' }}>
                       <img
                         src={imgSrc(draft.image_url)}
                         alt="Preview"
                         style={{
                           position: 'absolute', top: 0, left: 0,
                           width: '100%', height: '100%',
-                          objectFit: 'cover',
+                          objectFit: 'contain',
                         }}
                       />
                       <div style={{
@@ -281,22 +353,20 @@ export function DashboardPage() {
                   )}
 
                   <div className="card-body pb-2">
-                    <p className="font-weight-bold mb-1 small text-primary">{draft.business_name}</p>
-                    {/* Caption truncada — apenas prévia */}
-                    <p className="card-text text-dark mb-2" style={{ fontSize: 13, lineHeight: 1.5 }}>
+                    <p className="font-weight-bold mb-1 small" style={{ color: '#6f42c1' }}>{draft.business_name}</p>
+                    <p className="card-text mb-2" style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text-primary)' }}>
                       {draft.caption.slice(0, 120)}{draft.caption.length > 120 ? (
-                        <span className="text-primary"> ... ver mais</span>
+                        <span style={{ color: '#6f42c1' }}> ... ver mais</span>
                       ) : ''}
                     </p>
-                    {/* Hashtags preview */}
                     {draft.hashtags?.length > 0 && (
-                      <p className="text-muted mb-1" style={{ fontSize: 11 }}>
+                      <p className="mb-1" style={{ fontSize: 11, color: 'var(--text-hashtag)' }}>
                         {draft.hashtags.slice(0, 4).map(h => `#${h}`).join(' ')}
                         {draft.hashtags.length > 4 && <span> +{draft.hashtags.length - 4}</span>}
                       </p>
                     )}
                     {draft.best_posting_time && (
-                      <span className="text-muted" style={{ fontSize: 11 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                         <i className="fas fa-clock mr-1" />{draft.best_posting_time}
                       </span>
                     )}
