@@ -190,7 +190,7 @@ def readiness(business_id: str, user=Depends(get_current_user)) -> dict[str, Any
 # ─── Instagram ────────────────────────────────────────────────────────────────
 
 @router.post("/{business_id}/connect-instagram")
-def connect_instagram(business_id: str, data: InstagramConnect, user=Depends(get_current_user)) -> dict[str, Any]:
+async def connect_instagram(business_id: str, data: InstagramConnect, user=Depends(get_current_user)) -> dict[str, Any]:
     _verify_ownership(business_id, user["sub"])
     encrypted = encrypt_token(data.access_token)
     with get_connection() as conn:
@@ -199,7 +199,26 @@ def connect_instagram(business_id: str, data: InstagramConnect, user=Depends(get
                 "UPDATE businesses SET instagram_account_id = %s, instagram_access_token = %s, atualizado_em = NOW() WHERE id = %s",
                 (data.instagram_account_id, encrypted, business_id),
             )
-    return {"message": "Instagram conectado", "instagram_account_id": data.instagram_account_id}
+
+    # Auto-análise do estilo do Instagram em background
+    import asyncio
+    async def _auto_analyze():
+        try:
+            from src.engines.intelligence.instagram_analyzer import analyze_instagram_style
+            await analyze_instagram_style(business_id)
+        except Exception:
+            pass  # Silently fail — non-critical
+    asyncio.create_task(_auto_analyze())
+
+    return {"message": "Instagram conectado. Analisando estilo do feed...", "instagram_account_id": data.instagram_account_id}
+
+
+@router.post("/{business_id}/analyze-instagram-style")
+async def analyze_ig_style(business_id: str, user=Depends(get_current_user)) -> dict[str, Any]:
+    """Analisa os posts existentes do Instagram para entender o estilo do feed."""
+    _verify_ownership(business_id, user["sub"])
+    from src.engines.intelligence.instagram_analyzer import analyze_instagram_style
+    return await analyze_instagram_style(business_id)
 
 
 # ─── Intelligence (scraping & analysis) ──────────────────────────────────────

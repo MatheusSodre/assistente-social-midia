@@ -8,6 +8,7 @@ class ContentGenerateRequest(BaseModel):
     format: str = "post"
     tone: str = "profissional"
     audience: str = "geral"
+    slide_count: int = Field(default=5, ge=2, le=10)
 
 
 class BatchItem(BaseModel):

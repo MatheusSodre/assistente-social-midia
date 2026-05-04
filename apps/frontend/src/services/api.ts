@@ -129,6 +129,12 @@ export const api = {
   postHistory: () => request<HistoryPost[]>('GET', '/api/v1/posts/history'),
   postAnalytics: (businessId: string) =>
     request<PostAnalytics>('GET', `/api/v1/posts/analytics?business_id=${businessId}`),
+  syncMetrics: (businessId: string) =>
+    request<{ synced: number; errors: number }>('POST', `/api/v1/posts/sync-metrics?business_id=${businessId}`),
+
+  // Billing
+  getSubscription: () => request<SubscriptionInfo>('GET', '/api/v1/billing/subscription'),
+  upgradePlan: (plano: string) => request('POST', `/api/v1/billing/upgrade?plano=${plano}`),
 
   // Strategy
   getStrategy: (businessId: string) => request<BrandStrategy>('GET', `/api/v1/strategy/${businessId}`),
@@ -148,8 +154,25 @@ export const api = {
     request('DELETE', `/api/v1/agent/history/${businessId}`),
 
   // Agency (Sofia)
-  agencyChat: (data: { business_id: string; message: string }) =>
-    request<AgencyChatResponse>('POST', '/api/v1/agency/chat', data),
+  agencyChat: async (data: { business_id: string; message: string; image?: File }) => {
+    const form = new FormData()
+    form.append('business_id', data.business_id)
+    form.append('message', data.message)
+    if (data.image) form.append('image', data.image)
+    const token = localStorage.getItem('aa_jwt')
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 120_000)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/agency/chat`, { method: 'POST', headers, body: form, signal: controller.signal })
+      if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.detail || err.error || `HTTP ${res.status}`) }
+      return res.json() as Promise<AgencyChatResponse>
+    } catch (e: any) {
+      if (e.name === 'AbortError') throw new Error('A requisição demorou demais. Tente novamente.')
+      throw e
+    } finally { clearTimeout(timeout) }
+  },
   agencyHistory: (businessId: string) =>
     request<AgentHistoryResponse>('GET', `/api/v1/agency/history/${businessId}`),
   agencyClearHistory: (businessId: string) =>
@@ -244,10 +267,11 @@ export interface ContentDraft {
   id: string
   business_id: string
   business_name?: string
-  format: 'post' | 'story' | 'reel'
+  format: 'post' | 'story' | 'reel' | 'carrossel'
   caption: string
   hashtags: string[]
   image_url?: string
+  image_urls?: string[]
   visual_description?: string
   call_to_action?: string
   best_posting_time?: string
@@ -285,9 +309,10 @@ export interface HistoryPost {
 export interface GenerateRequest {
   business_id: string
   objective: string
-  format: 'post' | 'story' | 'reel'
+  format: 'post' | 'story' | 'reel' | 'carrossel'
   tone: 'profissional' | 'descontraido' | 'urgente' | 'educativo'
   audience: string
+  slide_count?: number
 }
 
 export interface BrandStrategy {
@@ -404,6 +429,20 @@ export interface FinanceAlert {
   date?: string
   days_until_due: number
   account_id?: string
+}
+
+export interface SubscriptionInfo {
+  plano: string
+  status: string
+  posts_used: number
+  posts_limit: number
+  businesses_limit: number
+  instagram_limit: number
+  formats: string[]
+  agents: string[]
+  ig_style_analysis: boolean
+  trial_ends_at?: string
+  current_period_end?: string
 }
 
 export interface VisualIdentity {

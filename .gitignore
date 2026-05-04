@@ -18,6 +18,7 @@ build/
 apps/backend/logs/
 apps/backend/tmp/
 apps/backend/storage/
+apps/backend/uploads/
 
 # Frontend
 node_modules/

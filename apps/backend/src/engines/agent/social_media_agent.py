@@ -22,39 +22,46 @@ _client = anthropic.Anthropic()
 MODEL_SMART = "claude-haiku-4-5-20251001"
 MODEL_FAST = "claude-haiku-4-5-20251001"
 
-MARA_SYSTEM = """Você é Mara, Social Media Manager com 10 anos de experiência em redes sociais.
+MARA_SYSTEM = """Você é Mara — Head de Social Media, 10 anos liderando estratégia de conteúdo para marcas como Reserva, Amaro e Liv Up.
 
-QUEM VOCÊ É:
-Você respira redes sociais. Começou como community manager em agências pequenas e hoje lidera estratégias de conteúdo para marcas de todos os tamanhos. Você entende algoritmos, tendências e o que faz as pessoas pararem o scroll e engajarem.
+COMO VOCÊ TRABALHA:
+Você EXECUTA. Quando pedem conteúdo, você CRIA na hora. Quando pedem análise, você ANALISA com dados. Você não é um assistente — é uma especialista contratada para entregar resultado.
 
-SUA PERSONALIDADE:
-- Entusiasmada e criativa: adora criar conteúdo e fica genuinamente animada com boas ideias
-- Prática e executora: quando pedem conteúdo, você CRIA na hora usando suas ferramentas, não fica só sugerindo
-- Antenada: fala com naturalidade sobre trends, formatos que estão performando bem, melhores horários
-- Empática: entende que cada negócio tem um público diferente e adapta a linguagem
-- Organizada: pensa em calendário editorial, frequência, mix de formatos
+REGRAS ABSOLUTAS:
+1. Quando pedirem conteúdo → use generate_content IMEDIATAMENTE. Não pergunte "sobre o que?". Use o contexto do negócio e crie.
+2. NUNCA faça mais de 1 pergunta por resposta. Se precisa de algo, pergunte e já sugira um default.
+3. Respostas CURTAS: máximo 3-4 parágrafos. Sem listas intermináveis.
+4. Sem emojis excessivos. Máximo 1-2 por resposta.
+5. Não repita o que o cliente já sabe. Vá direto ao ponto.
+6. Após criar conteúdo, mostre: formato, primeiras linhas da caption, e 1 próximo passo sugerido.
 
-COMO TRABALHAR:
-- Quando pedirem conteúdo → use generate_content ou generate_batch_content imediatamente
-- Após criar, apresente um resumo bonito: caption (primeiras linhas), formato, e próximos passos
-- Sugira proativamente: "Que tal criarmos stories para complementar esse post?"
-- Se o cliente não tem estratégia definida, pergunte sobre o tom, público e objetivos antes de criar
-- Use a identidade visual da marca (cores, estilo) para orientar as descrições visuais dos posts
+QUANDO PEDEM ANÁLISE:
+- Use analyze_performance para puxar dados REAIS
+- Interprete os números como estrategista: "Seus posts educativos têm 3x mais aprovação que os promocionais — vamos dobrar essa aposta"
+- Dê recomendações ACIONÁVEIS, não observações genéricas
 
-Fale português brasileiro de forma natural, como uma profissional falaria com seu cliente. Seja calorosa mas profissional.
+QUANDO PEDEM CALENDÁRIO:
+- Crie com suggest_editorial_calendar e apresente de forma visual e organizada
+- Justifique cada escolha: "Segunda é educativo porque seu público está em modo 'aprender' no início da semana"
+
+LINGUAGEM:
+- Português brasileiro, tom de consultora sênior
+- Assertiva e direta, mas acessível
+- Fala de algoritmo, timing, engajamento com naturalidade
 """
 
 TOOLS: list[dict[str, Any]] = [
     {
         "name": "generate_content",
-        "description": "Gera um post/story/reel completo (texto + imagem) para o business. Use quando o usuário pedir para criar conteúdo individual.",
+        "description": "Gera um post/story/reel/carrossel completo (texto + imagem) para o business. Use quando o usuário pedir para criar conteúdo individual. Para carrossel, inclua slide_count.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "objective": {"type": "string", "description": "Objetivo ou tema do conteúdo"},
-                "format": {"type": "string", "enum": ["post", "story", "reel"], "description": "Formato"},
+                "format": {"type": "string", "enum": ["post", "story", "reel", "carrossel"], "description": "Formato (carrossel = 2-10 slides)"},
                 "tone": {"type": "string", "enum": ["profissional", "descontraido", "urgente", "educativo"], "description": "Tom de voz"},
                 "audience": {"type": "string", "description": "Público-alvo (ex: 'mulheres 25-35 anos')"},
+                "slide_count": {"type": "integer", "description": "Número de slides do carrossel (2-10, padrão 5). Só usado se format=carrossel.", "minimum": 2, "maximum": 10},
             },
             "required": ["objective", "format"],
         },
@@ -176,8 +183,9 @@ async def _exec_generate_content(business_id: str, business_name: str, business_
         tone=tool_input.get("tone", "profissional"),
         audience=tool_input.get("audience", "geral"),
         brand_strategy=enriched_strategy,
+        slide_count=tool_input.get("slide_count", 5),
     )
-    return {
+    result = {
         "success": True,
         "draft_id": draft["id"],
         "caption": draft["caption"][:200] + "..." if len(draft.get("caption", "")) > 200 else draft.get("caption", ""),
@@ -185,6 +193,10 @@ async def _exec_generate_content(business_id: str, business_name: str, business_
         "status": "pending_approval",
         "message": f"Conteúdo criado! ID: {draft['id']}. Aguarda aprovação.",
     }
+    if draft.get("image_urls"):
+        result["image_urls"] = draft["image_urls"]
+        result["slide_count"] = len(draft["image_urls"])
+    return result
 
 
 async def _exec_generate_batch(business_id: str, business_name: str, business_type: str,
@@ -357,7 +369,7 @@ def _exec_suggest_calendar(business_id: str, brand_strategy: dict | None, days: 
     posts_count = 0
     max_posts = round(posts_per_week * days / 7)
 
-    formats_cycle = ["post", "story", "post", "reel", "post", "story", "post"]
+    formats_cycle = ["post", "story", "carrossel", "reel", "post", "story", "post"]
 
     day_offset = 0
     pillar_idx = 0
@@ -468,7 +480,10 @@ def _load_conversation(business_id: str, usuario_id: str) -> list[dict]:
 
 
 def _save_conversation(business_id: str, usuario_id: str, messages: list[dict]) -> None:
-    trimmed = messages[-20:] if len(messages) > 20 else messages
+    trimmed = messages[-20:] if len(messages) > 20 else list(messages)
+    # Garante que o histórico comece com mensagem user (string)
+    while trimmed and not (trimmed[0].get("role") == "user" and isinstance(trimmed[0].get("content"), str)):
+        trimmed.pop(0)
     msgs_json = json.dumps(trimmed, ensure_ascii=False, default=str)
 
     with get_connection() as conn:

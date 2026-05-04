@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth.dependencies import get_current_user
 from src.db.connection import get_connection
-from src.engines.publisher.instagram import publish_image_post
+from src.engines.publisher.instagram import publish_image_post, publish_carousel_post
 from src.engines.publisher.token_manager import decrypt_token
 from .schemas import SchedulePostRequest
 
@@ -83,7 +83,7 @@ async def publish_now(draft_id: str, user=Depends(get_current_user)) -> dict[str
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT cd.id, cd.caption, cd.hashtags, cd.image_url, cd.status,
+                SELECT cd.id, cd.format, cd.caption, cd.hashtags, cd.image_url, cd.image_urls, cd.status,
                        b.instagram_account_id, b.instagram_access_token
                 FROM content_drafts cd
                 JOIN businesses b ON b.id = cd.business_id
@@ -99,20 +99,36 @@ async def publish_now(draft_id: str, user=Depends(get_current_user)) -> dict[str
         raise HTTPException(400, "Draft deve estar aprovado para publicar")
     if not row["instagram_account_id"] or not row["instagram_access_token"]:
         raise HTTPException(400, "Instagram não conectado neste business")
-    if not row["image_url"]:
+    import json
+
+    is_carousel = row.get("format") == "carrossel"
+    image_urls_raw = row.get("image_urls")
+    if isinstance(image_urls_raw, str):
+        image_urls_raw = json.loads(image_urls_raw)
+
+    if is_carousel and not image_urls_raw:
+        raise HTTPException(400, "Carrossel não possui imagens geradas")
+    if not is_carousel and not row["image_url"]:
         raise HTTPException(400, "Draft não possui imagem gerada")
 
-    import json
     hashtags = json.loads(row["hashtags"]) if isinstance(row["hashtags"], str) else (row["hashtags"] or [])
     caption = row["caption"] + "\n\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags)
     access_token = decrypt_token(row["instagram_access_token"])
 
-    media_id = await publish_image_post(
-        instagram_account_id=row["instagram_account_id"],
-        access_token=access_token,
-        image_url=row["image_url"],
-        caption=caption,
-    )
+    if is_carousel:
+        media_id = await publish_carousel_post(
+            instagram_account_id=row["instagram_account_id"],
+            access_token=access_token,
+            image_urls=image_urls_raw,
+            caption=caption,
+        )
+    else:
+        media_id = await publish_image_post(
+            instagram_account_id=row["instagram_account_id"],
+            access_token=access_token,
+            image_url=row["image_url"],
+            caption=caption,
+        )
 
     with get_connection() as conn:
         with conn.cursor() as cur:

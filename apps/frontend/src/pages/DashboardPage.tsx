@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { api } from '../services/api'
 import type { ContentDraft } from '../services/api'
 
@@ -10,10 +10,11 @@ function imgSrc(url?: string) {
 }
 
 function FormatBadge({ format }: { format: string }) {
-  const map: Record<string, string> = { post: 'primary', story: 'success', reel: 'warning' }
+  const map: Record<string, string> = { post: 'primary', story: 'success', reel: 'warning', carrossel: 'info' }
+  const iconMap: Record<string, string> = { post: 'th', story: 'image', reel: 'film', carrossel: 'images' }
   return (
     <span className={`badge badge-${map[format] ?? 'secondary'} mr-1`}>
-      <i className={`fas fa-${format === 'story' ? 'image' : format === 'reel' ? 'film' : 'th'} mr-1`} />
+      <i className={`fas fa-${iconMap[format] ?? 'th'} mr-1`} />
       {format.toUpperCase()}
     </span>
   )
@@ -28,9 +29,65 @@ interface DraftModalProps {
   onClose: () => void
 }
 
+function CarouselViewer({ urls, imgSrcFn }: { urls: string[]; imgSrcFn: (url?: string) => string }) {
+  const [idx, setIdx] = useState(0)
+  const prev = useCallback(() => setIdx(i => Math.max(0, i - 1)), [])
+  const next = useCallback(() => setIdx(i => Math.min(urls.length - 1, i + 1)), [urls.length])
+
+  return (
+    <div style={{ width: '100%', background: '#fafafa', position: 'relative' }}>
+      <img
+        src={imgSrcFn(urls[idx])}
+        alt={`Slide ${idx + 1}`}
+        style={{ width: '100%', maxHeight: 375, objectFit: 'contain', display: 'block' }}
+      />
+      {/* Arrows */}
+      {idx > 0 && (
+        <button onClick={prev} style={{
+          position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+          background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%',
+          width: 32, height: 32, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <i className="fas fa-chevron-left" />
+        </button>
+      )}
+      {idx < urls.length - 1 && (
+        <button onClick={next} style={{
+          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+          background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%',
+          width: 32, height: 32, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <i className="fas fa-chevron-right" />
+        </button>
+      )}
+      {/* Dots */}
+      <div style={{
+        position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 5,
+      }}>
+        {urls.map((_, i) => (
+          <div key={i} style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: i === idx ? '#0095f6' : 'rgba(255,255,255,0.7)',
+            cursor: 'pointer',
+          }} onClick={() => setIdx(i)} />
+        ))}
+      </div>
+      {/* Counter */}
+      <div style={{
+        position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)',
+        color: '#fff', borderRadius: 12, padding: '2px 8px', fontSize: 12,
+      }}>
+        {idx + 1}/{urls.length}
+      </div>
+    </div>
+  )
+}
+
 function DraftModal({ draft, actionLoading, onApprove, onReject, onPublish, onClose }: DraftModalProps) {
   const busy = !!actionLoading
   const isStory = draft.format === 'story' || draft.format === 'reel'
+  const isCarousel = draft.format === 'carrossel' && draft.image_urls && draft.image_urls.length > 0
 
   return (
     <div
@@ -81,8 +138,10 @@ function DraftModal({ draft, actionLoading, onApprove, onReject, onPublish, onCl
               <div style={{ marginLeft: 'auto', fontSize: 16, color: '#262626' }}>...</div>
             </div>
 
-            {/* Image — contain para mostrar completa, sem cortar */}
-            {draft.image_url ? (
+            {/* Image / Carousel */}
+            {isCarousel ? (
+              <CarouselViewer urls={draft.image_urls!} imgSrcFn={imgSrc} />
+            ) : draft.image_url ? (
               <div style={{ width: '100%', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <img
                   src={imgSrc(draft.image_url)}
@@ -323,7 +382,29 @@ export function DashboardPage() {
                   onMouseLeave={e => (e.currentTarget.style.boxShadow = '')}
                 >
                   {/* Imagem — contain para ver completa */}
-                  {draft.image_url ? (
+                  {(draft.format === 'carrossel' && draft.image_urls?.length) ? (
+                    <div style={{ position: 'relative', paddingTop: '100%', overflow: 'hidden', background: 'var(--bg-surface)' }}>
+                      <img
+                        src={imgSrc(draft.image_urls[0])}
+                        alt="Preview"
+                        style={{
+                          position: 'absolute', top: 0, left: 0,
+                          width: '100%', height: '100%',
+                          objectFit: 'contain',
+                        }}
+                      />
+                      <div style={{ position: 'absolute', top: 8, left: 8 }}>
+                        <FormatBadge format={draft.format} />
+                      </div>
+                      <div style={{
+                        position: 'absolute', top: 8, right: 8,
+                        background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 8,
+                        padding: '2px 8px', fontSize: 11, fontWeight: 600,
+                      }}>
+                        <i className="fas fa-images mr-1" />{draft.image_urls.length} slides
+                      </div>
+                    </div>
+                  ) : draft.image_url ? (
                     <div style={{ position: 'relative', paddingTop: '100%', overflow: 'hidden', background: 'var(--bg-surface)' }}>
                       <img
                         src={imgSrc(draft.image_url)}
@@ -334,9 +415,7 @@ export function DashboardPage() {
                           objectFit: 'contain',
                         }}
                       />
-                      <div style={{
-                        position: 'absolute', top: 8, left: 8,
-                      }}>
+                      <div style={{ position: 'absolute', top: 8, left: 8 }}>
                         <FormatBadge format={draft.format} />
                       </div>
                     </div>

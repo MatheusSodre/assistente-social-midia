@@ -22,6 +22,9 @@ export function AdminLTELayout() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
   const [pendingCount, setPendingCount] = useState(0)
   const [onboardingBusinessId, setOnboardingBusinessId] = useState('')
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
+
+  const toggleMenu = (key: string) => setOpenMenus(prev => ({ ...prev, [key]: !prev[key] }))
 
   useEffect(() => {
     const classes = 'hold-transition sidebar-mini layout-fixed' + (darkMode ? ' dark-mode' : '')
@@ -128,7 +131,7 @@ export function AdminLTELayout() {
   return (
     <div className="wrapper">
       {/* Navbar */}
-      <nav className="main-header navbar navbar-expand navbar-white navbar-light">
+      <nav className="main-header navbar navbar-expand navbar-dark">
         <ul className="navbar-nav">
           <li className="nav-item">
             <a className="nav-link" data-widget="pushmenu" href="#" role="button">
@@ -248,7 +251,7 @@ export function AdminLTELayout() {
           </div>
 
           <nav className="mt-2">
-            <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+            <ul className="nav nav-pills nav-sidebar flex-column" role="menu">
               <NavItem m="home" icon="fas fa-home" label="Início" />
 
               {/* Ação principal — destaque visual */}
@@ -270,32 +273,42 @@ export function AdminLTELayout() {
               <NavItem m="calendar" icon="fas fa-calendar-alt" label="Calendário" />
               <NavItem m="history" icon="fas fa-history" label="Histórico" />
 
-              {/* Configurações — colapsável */}
-              <li className={`nav-item has-treeview ${['strategy', 'businesses', 'finance'].includes(modulo) ? 'menu-open' : ''}`}>
-                <a href="#" className="nav-link" onClick={e => e.preventDefault()}>
-                  <i className="nav-icon fas fa-cog" />
-                  <p>Configurações <i className="fas fa-angle-left right" /></p>
-                </a>
-                <ul className="nav nav-treeview">
-                  <NavItem m="strategy" icon="fas fa-chess" label="Estratégia & Marca" />
-                  <NavItem m="businesses" icon="fas fa-building" label="Meus Negócios" />
-                  <NavItem m="finance" icon="fas fa-wallet" label="Financeiro" />
-                </ul>
-              </li>
+              {/* Configurações */}
+              {(() => {
+                const configOpen = openMenus['config'] || ['strategy', 'businesses', 'finance'].includes(modulo)
+                return (
+                  <li className={`nav-item ${configOpen ? 'menu-open' : ''}`}>
+                    <a href="#" className="nav-link" onClick={e => { e.preventDefault(); toggleMenu('config') }}>
+                      <i className="nav-icon fas fa-cog" />
+                      <p>Configurações <i className={`fas fa-angle-${configOpen ? 'down' : 'left'} right`} /></p>
+                    </a>
+                    <ul className="nav nav-treeview" style={{ display: configOpen ? 'block' : 'none' }}>
+                      <NavItem m="strategy" icon="fas fa-chess" label="Estratégia & Marca" />
+                      <NavItem m="businesses" icon="fas fa-building" label="Meus Negócios" />
+                      <NavItem m="finance" icon="fas fa-wallet" label="Financeiro" />
+                    </ul>
+                  </li>
+                )
+              })()}
 
-              {/* Especialistas — colapsável */}
-              <li className={`nav-item has-treeview ${['agent', 'designer', 'ads', 'generate'].includes(modulo) ? 'menu-open' : ''}`}>
-                <a href="#" className="nav-link" onClick={e => e.preventDefault()}>
-                  <i className="nav-icon fas fa-users-cog" />
-                  <p>Especialistas <i className="fas fa-angle-left right" /></p>
-                </a>
-                <ul className="nav nav-treeview">
-                  <NavItem m="agent" icon="fas fa-share-alt" label="Social Media" />
-                  <NavItem m="designer" icon="fas fa-palette" label="Designer Visual" />
-                  <NavItem m="ads" icon="fas fa-ad" label="Google Ads" />
-                  <NavItem m="generate" icon="fas fa-bolt" label="Gerar Rápido" />
-                </ul>
-              </li>
+              {/* Especialistas */}
+              {(() => {
+                const specOpen = openMenus['spec'] || ['agent', 'designer', 'ads', 'generate'].includes(modulo)
+                return (
+                  <li className={`nav-item ${specOpen ? 'menu-open' : ''}`}>
+                    <a href="#" className="nav-link" onClick={e => { e.preventDefault(); toggleMenu('spec') }}>
+                      <i className="nav-icon fas fa-users-cog" />
+                      <p>Especialistas <i className={`fas fa-angle-${specOpen ? 'down' : 'left'} right`} /></p>
+                    </a>
+                    <ul className="nav nav-treeview" style={{ display: specOpen ? 'block' : 'none' }}>
+                      <NavItem m="agent" icon="fas fa-share-alt" label="Social Media" />
+                      <NavItem m="designer" icon="fas fa-palette" label="Designer Visual" />
+                      <NavItem m="ads" icon="fas fa-ad" label="Google Ads" />
+                      <NavItem m="generate" icon="fas fa-bolt" label="Gerar Rápido" />
+                    </ul>
+                  </li>
+                )
+              })()}
             </ul>
           </nav>
         </div>

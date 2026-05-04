@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../services/api'
 import type { Business } from '../services/api'
+import { ChatMessage } from '../components/ChatMessage'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
   steps?: AgentStep[]
+  uploaded_image?: string
 }
 
 interface AgentStep {
@@ -39,6 +41,9 @@ export function AgencyPage() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [activeStep, setActiveStep] = useState<string | null>(null)
   const [loadingMsg, setLoadingMsg] = useState('')
+  const [pendingImage, setPendingImage] = useState<File | null>(null)
+  const [pendingPreview, setPendingPreview] = useState<string>('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -61,12 +66,17 @@ export function AgencyPage() {
   }, [messages, activeStep])
 
   const send = async (text: string) => {
-    if (!selectedBusiness || !text.trim() || loading) return
-    const msgText = text.trim()
+    if (!selectedBusiness || loading) return
+    if (!text.trim() && !pendingImage) return
+    const msgText = text.trim() || (pendingImage ? 'Crie um post com essa imagem' : '')
     const bizId = selectedBusiness
-    const userMsg: Message = { role: 'user', content: msgText }
+    const imageFile = pendingImage
+    const imagePreview = pendingPreview
+    const userMsg: Message = { role: 'user', content: msgText, uploaded_image: imagePreview || undefined }
     setMessages(prev => [...prev, userMsg])
     setInput('')
+    setPendingImage(null)
+    setPendingPreview('')
     setLoading(true)
     setActiveStep(null)
     const loadingMessages = [
@@ -78,13 +88,12 @@ export function AgencyPage() {
     ]
     setLoadingMsg(loadingMessages[Math.floor(Math.random() * loadingMessages.length)])
 
-    // Troca mensagem de loading a cada 8s para dar sensação de progresso
     const loadingTimer = setInterval(() => {
       setLoadingMsg(loadingMessages[Math.floor(Math.random() * loadingMessages.length)])
     }, 8000)
 
     try {
-      const res = await api.agencyChat({ business_id: bizId, message: msgText })
+      const res = await api.agencyChat({ business_id: bizId, message: msgText, image: imageFile || undefined })
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: res.response,
@@ -100,6 +109,20 @@ export function AgencyPage() {
       setLoading(false)
       setActiveStep(null)
     }
+  }
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPendingImage(file)
+    setPendingPreview(URL.createObjectURL(file))
+  }
+
+  const clearPendingImage = () => {
+    setPendingImage(null)
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+    setPendingPreview('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const clearHistory = async () => {
@@ -267,16 +290,25 @@ export function AgencyPage() {
                 )}
                 <div style={{ maxWidth: '75%' }}>
                   {msg.steps && msg.steps.length > 0 && renderSteps(msg.steps)}
+                  {msg.uploaded_image && (
+                    <div className="mb-1">
+                      <img
+                        src={msg.uploaded_image}
+                        alt="Imagem enviada"
+                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, display: 'block' }}
+                      />
+                    </div>
+                  )}
                   <div
                     className="rounded p-3 small"
                     style={{
                       background: msg.role === 'user' ? '#6f42c1' : 'var(--bg-chat-msg)',
                       color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-                      whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
+                      ...(msg.role === 'user' ? { whiteSpace: 'pre-wrap' as const } : {}),
                     }}
                   >
-                    {msg.content}
+                    <ChatMessage content={msg.content} role={msg.role} />
                   </div>
                 </div>
                 {msg.role === 'user' && (
@@ -308,11 +340,38 @@ export function AgencyPage() {
           </div>
 
           <div className="card-footer">
+            {/* Preview da imagem pendente */}
+            {pendingPreview && (
+              <div className="mb-2 d-flex align-items-center" style={{ gap: 8 }}>
+                <img src={pendingPreview} alt="Preview" style={{ height: 48, borderRadius: 6 }} />
+                <span className="text-muted small">{pendingImage?.name}</span>
+                <button className="btn btn-sm btn-outline-danger ml-auto" onClick={clearPendingImage}>
+                  <i className="fas fa-times" />
+                </button>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleImageSelect}
+            />
             <div className="input-group">
+              <div className="input-group-prepend">
+                <button
+                  className="btn btn-outline-secondary"
+                  title="Enviar imagem"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!selectedBusiness || loading}
+                >
+                  <i className="fas fa-image" />
+                </button>
+              </div>
               <input
                 type="text"
                 className="form-control"
-                placeholder={selectedBusiness ? 'Fale com a Sofia...' : 'Selecione um business primeiro'}
+                placeholder={pendingImage ? 'Descreva o que fazer com a imagem...' : (selectedBusiness ? 'Fale com a Sofia...' : 'Selecione um business primeiro')}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
@@ -323,7 +382,7 @@ export function AgencyPage() {
                   className="btn"
                   style={{ background: '#6f42c1', color: '#fff', borderColor: '#6f42c1' }}
                   onClick={() => send(input)}
-                  disabled={!selectedBusiness || !input.trim() || loading}
+                  disabled={!selectedBusiness || (!input.trim() && !pendingImage) || loading}
                 >
                   <i className="fas fa-paper-plane" />
                 </button>

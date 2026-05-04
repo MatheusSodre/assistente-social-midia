@@ -167,5 +167,30 @@ def brand_context_to_prompt(context: dict[str, Any]) -> str:
         if vi.get("extra_context"):
             parts.append(f"Contexto extra: {vi['extra_context']}")
 
+    # Instagram Style Analysis (se existir)
+    ig_style = biz.get("brand_context", {}).get("instagram_style")
+    if ig_style:
+        parts.append("\n── Estilo do Instagram (análise dos posts existentes) ──")
+        ws = ig_style.get("writing_style", {})
+        if ws:
+            parts.append(f"Tom de escrita: {ws.get('tone', '?')}")
+            parts.append(f"Tamanho das captions: {ws.get('caption_length', '?')}")
+            if ws.get("uses_emojis"):
+                parts.append(f"Emojis usados: {ws.get('emoji_style', 'sim')}")
+            if ws.get("language_patterns"):
+                parts.append(f"Padrões de escrita: {ws['language_patterns']}")
+            if ws.get("cta_examples"):
+                parts.append(f"CTAs típicos: {', '.join(ws['cta_examples'][:3])}")
+        vs = ig_style.get("visual_style", {})
+        if vs:
+            parts.append(f"Estética visual: {vs.get('dominant_aesthetic', '?')}")
+            parts.append(f"Paleta predominante: {vs.get('color_palette', '?')}")
+            parts.append(f"Estilo fotográfico: {vs.get('photo_style', '?')}")
+        cp = ig_style.get("content_patterns", {})
+        if cp and cp.get("main_themes"):
+            parts.append(f"Temas principais: {', '.join(cp['main_themes'])}")
+        if ig_style.get("image_prompt_guide"):
+            parts.append(f"Guia de imagem: {ig_style['image_prompt_guide']}")
+
     parts.append("═══════════════════════════════\n")
     return "\n".join(parts)

@@ -38,10 +38,11 @@ CREATE TABLE IF NOT EXISTS businesses (
 CREATE TABLE IF NOT EXISTS content_drafts (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     business_id CHAR(36) NOT NULL,
-    format ENUM('post','story','reel') NOT NULL DEFAULT 'post',
+    format ENUM('post','story','reel','carrossel') NOT NULL DEFAULT 'post',
     caption TEXT NOT NULL,
     hashtags JSON NULL,
     image_url TEXT NULL,
+    image_urls JSON NULL COMMENT 'Lista de URLs para carrossel',
     video_url TEXT NULL,
     visual_description TEXT NULL,
     call_to_action VARCHAR(500) NULL,
@@ -56,10 +57,18 @@ CREATE TABLE IF NOT EXISTS content_drafts (
 CREATE TABLE IF NOT EXISTS scheduled_posts (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     content_draft_id CHAR(36) NOT NULL,
-    platform VARCHAR(50) NOT NULL DEFAULT 'instagram',
+    platform ENUM('instagram','tiktok','linkedin') NOT NULL DEFAULT 'instagram',
     scheduled_for DATETIME NOT NULL,
     posted_at DATETIME NULL,
     instagram_media_id VARCHAR(255) NULL,
+    likes INT NULL DEFAULT 0,
+    comments INT NULL DEFAULT 0,
+    reach INT NULL DEFAULT 0,
+    impressions INT NULL DEFAULT 0,
+    saved INT NULL DEFAULT 0,
+    shares INT NULL DEFAULT 0,
+    engagement_rate DECIMAL(6,2) NULL DEFAULT 0,
+    metrics_updated_at DATETIME NULL,
     status ENUM('scheduled','published','failed') NOT NULL DEFAULT 'scheduled',
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -191,12 +200,47 @@ CREATE TABLE IF NOT EXISTS finance_transactions (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_pluggy_id (pluggy_id),
     CONSTRAINT fk_fin_tx_conn FOREIGN KEY (connection_id) REFERENCES finance_connections(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    usuario_id CHAR(36) NOT NULL,
+    plano ENUM('starter','pro','premium') NOT NULL DEFAULT 'starter',
+    status ENUM('trial','active','cancelled','expired') NOT NULL DEFAULT 'trial',
+    stripe_customer_id VARCHAR(255) NULL,
+    stripe_subscription_id VARCHAR(255) NULL,
+    trial_ends_at DATETIME NULL,
+    current_period_start DATETIME NULL,
+    current_period_end DATETIME NULL,
+    posts_used_this_month INT NOT NULL DEFAULT 0,
+    posts_reset_at DATETIME NULL COMMENT 'Data do próximo reset do contador',
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_sub_usuario (usuario_id),
+    CONSTRAINT fk_sub_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 """
 
 # Migrations para bancos já existentes (ALTER TABLE seguras com IF NOT EXISTS via procedure)
 MIGRATIONS = """
 SET @dbname = DATABASE();
+
+-- Métricas de engajamento nos scheduled_posts
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'scheduled_posts' AND COLUMN_NAME = 'likes';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE scheduled_posts ADD COLUMN likes INT NULL DEFAULT 0 AFTER instagram_media_id, ADD COLUMN comments INT NULL DEFAULT 0 AFTER likes, ADD COLUMN reach INT NULL DEFAULT 0 AFTER comments, ADD COLUMN impressions INT NULL DEFAULT 0 AFTER reach, ADD COLUMN saved INT NULL DEFAULT 0 AFTER impressions, ADD COLUMN shares INT NULL DEFAULT 0 AFTER saved, ADD COLUMN engagement_rate DECIMAL(6,2) NULL DEFAULT 0 AFTER shares, ADD COLUMN metrics_updated_at DATETIME NULL AFTER engagement_rate', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Carrossel: adicionar image_urls e expandir ENUM format
+SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'content_drafts' AND COLUMN_NAME = 'image_urls';
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE content_drafts ADD COLUMN image_urls JSON NULL COMMENT ''Lista de URLs para carrossel'' AFTER image_url', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT COLUMN_TYPE INTO @fmt FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'content_drafts' AND COLUMN_NAME = 'format';
+SET @sql = IF(@fmt NOT LIKE '%carrossel%', 'ALTER TABLE content_drafts MODIFY COLUMN format ENUM(''post'',''story'',''reel'',''carrossel'') NOT NULL DEFAULT ''post''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SELECT COUNT(*) INTO @col_exists FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = 'businesses' AND COLUMN_NAME = 'description';

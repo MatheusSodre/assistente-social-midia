@@ -62,10 +62,21 @@ def get_history(business_id: str, user=Depends(get_current_user)) -> dict[str, A
         content = m.get("content")
         if role == "user" and isinstance(content, str):
             clean.append({"role": "user", "content": content})
-        elif role == "assistant" and isinstance(content, list):
-            text = next((b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text"), None)
-            if text:
-                clean.append({"role": "assistant", "content": text})
+        elif role == "assistant":
+            if isinstance(content, str):
+                if content.strip():
+                    clean.append({"role": "assistant", "content": content})
+            elif isinstance(content, list):
+                text = next(
+                    (b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()),
+                    None,
+                )
+                if text:
+                    clean.append({"role": "assistant", "content": text})
+
+    # Garante que o histórico não comece com assistant
+    while clean and clean[0].get("role") != "user":
+        clean.pop(0)
 
     return {"messages": clean, "business_id": business_id}
 

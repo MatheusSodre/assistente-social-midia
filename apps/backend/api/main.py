@@ -20,6 +20,8 @@ from .ads.router import router as ads_router
 from .designer.router import router as designer_router
 from .finance.router import router as finance_router
 from .agency.router import router as agency_router
+from .billing.router import router as billing_router
+from .notifications.router import router as notifications_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,6 +84,8 @@ app.include_router(ads_router)
 app.include_router(designer_router)
 app.include_router(finance_router)
 app.include_router(agency_router)
+app.include_router(billing_router)
+app.include_router(notifications_router)
 
 
 @app.get("/health")

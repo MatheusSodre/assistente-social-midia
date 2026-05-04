@@ -71,6 +71,41 @@ MOOD, STYLE, TECHNICAL (8K, sharp, professional), NEGATIVE (no text, no watermar
 A imagem deve funcionar como fundo de story com texto sobreposto.
 """
 
+CAROUSEL_PROMPT = """Crie um carrossel com {slide_count} slides para Instagram:
+
+Tipo de negócio: {business_type}
+Nome da empresa: {business_name}
+Objetivo: {objective}
+Tom de voz: {tone}
+Público-alvo: {audience}
+
+Retorne JSON:
+{{
+  "caption": "caption em português brasileiro (gancho forte na 1ª linha, máx 2200 chars)",
+  "hashtags": ["mix", "de", "hashtags"],
+  "call_to_action": "CTA em português",
+  "best_posting_time": "HH:MM",
+  "slides": [
+    {{
+      "visual_description": "PROMPT DE IMAGEM EM INGLÊS (80-150 palavras)",
+      "text_overlay": "frase de impacto em português (máx 15 palavras)"
+    }}
+  ]
+}}
+
+REGRAS DO CARROSSEL:
+- Gere exatamente {slide_count} slides
+- SLIDE 1: visual impactante + frase que gera curiosidade
+- SLIDES DO MEIO: narrativa progressiva, cada slide = 1 insight
+- ÚLTIMO SLIDE: CTA visual forte
+
+INSTRUÇÕES PARA visual_description DE CADA SLIDE:
+Escreva EM INGLÊS 80-150 palavras. Formato quadrado 1:1.
+Inclua: SUBJECT, SETTING, LIGHTING, COMPOSITION, MOOD, STYLE, TECHNICAL (8K, professional).
+NEGATIVE: no text, no watermarks, no logos.
+Todos os slides devem ter a MESMA paleta de cores e estilo visual — como uma sessão fotográfica.
+"""
+
 
 async def generate_post_script(
     business_type: str,
@@ -80,15 +115,34 @@ async def generate_post_script(
     audience: str = "geral",
     format: str = "post",
     brand_strategy: dict | None = None,
+    **kwargs,
 ) -> dict[str, Any]:
-    prompt_template = STORY_PROMPT if format == "story" else POST_PROMPT
-    user_prompt = prompt_template.format(
-        business_type=business_type,
-        business_name=business_name,
-        objective=objective,
-        tone=tone,
-        audience=audience,
-    )
+    if format == "carrossel":
+        slide_count = kwargs.get("slide_count", 5)
+        user_prompt = CAROUSEL_PROMPT.format(
+            business_type=business_type,
+            business_name=business_name,
+            objective=objective,
+            tone=tone,
+            audience=audience,
+            slide_count=slide_count,
+        )
+    elif format == "story":
+        user_prompt = STORY_PROMPT.format(
+            business_type=business_type,
+            business_name=business_name,
+            objective=objective,
+            tone=tone,
+            audience=audience,
+        )
+    else:
+        user_prompt = POST_PROMPT.format(
+            business_type=business_type,
+            business_name=business_name,
+            objective=objective,
+            tone=tone,
+            audience=audience,
+        )
 
     if brand_strategy:
         extra_parts = []
@@ -119,14 +173,36 @@ async def generate_post_script(
         if extra_parts:
             user_prompt += "\n\nContexto adicional da estratégia de marca:\n" + "\n".join(extra_parts)
 
+    # Instagram style — análise dos posts existentes do perfil
+    ig_style = kwargs.get("instagram_style") or {}
+    if ig_style:
+        ig_parts = ["\n\nESTILO DO INSTAGRAM EXISTENTE (siga para manter consistência):"]
+        ws = ig_style.get("writing_style", {})
+        if ws.get("tone"):
+            ig_parts.append(f"- Tom de escrita: {ws['tone']}")
+        if ws.get("caption_length"):
+            ig_parts.append(f"- Tamanho de caption: {ws['caption_length']}")
+        vs = ig_style.get("visual_style", {})
+        if vs.get("dominant_aesthetic"):
+            ig_parts.append(f"- Estética visual: {vs['dominant_aesthetic']}")
+        if ig_style.get("image_prompt_guide"):
+            ig_parts.append(f"- GUIA para visual_description: {ig_style['image_prompt_guide']}")
+        user_prompt += "\n".join(ig_parts)
+
     try:
+        max_tok = 4096 if format == "carrossel" else 2048
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
+            max_tokens=max_tok,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
         raw = message.content[0].text.strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3].strip()
         return json.loads(raw)
     except json.JSONDecodeError as e:
         logger.error({"event": "script_engine_json_error", "error": str(e)})

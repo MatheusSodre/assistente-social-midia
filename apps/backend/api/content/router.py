@@ -11,6 +11,7 @@ from src.engines.brand_context import get_unified_brand_context
 from src.engines.orchestrator import generate_content
 from src.engines.image_engine.imagen_client import generate_image_gemini
 from src.engines.image_engine.storage import upload_image
+from api.billing.router import check_can_generate, increment_post_count
 from .schemas import ContentGenerateRequest, BatchGenerateRequest
 
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
@@ -18,6 +19,11 @@ router = APIRouter(prefix="/api/v1/content", tags=["content"])
 
 @router.post("/generate")
 async def generate(data: ContentGenerateRequest, user=Depends(get_current_user)) -> dict[str, Any]:
+    # Verifica limites do plano
+    can = check_can_generate(user["sub"], data.format)
+    if not can["allowed"]:
+        raise HTTPException(403, can["reason"])
+
     # Verifica que o business pertence ao usuário
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -46,7 +52,9 @@ async def generate(data: ContentGenerateRequest, user=Depends(get_current_user))
         tone=data.tone,
         audience=data.audience,
         brand_strategy=enriched_strategy if enriched_strategy else None,
+        slide_count=data.slide_count,
     )
+    increment_post_count(user["sub"])
     return draft
 
 
@@ -186,11 +194,20 @@ async def generate_batch(data: BatchGenerateRequest, user=Depends(get_current_us
     return {"created": len(drafts), "drafts": drafts, "errors": errors}
 
 
+@router.get("/templates")
+def get_templates(business_type: str = "", user=Depends(get_current_user)) -> list[dict]:
+    """Retorna templates sugeridos para o tipo de negócio."""
+    from src.engines.script_engine.templates.library import suggest_templates, TEMPLATES
+    if business_type:
+        return suggest_templates(business_type)
+    return TEMPLATES
+
+
 @router.get("")
 def list_drafts(user=Depends(get_current_user), status: str = None) -> list[dict[str, Any]]:
     query = """
         SELECT cd.id, cd.business_id, b.name as business_name, cd.format,
-               cd.caption, cd.hashtags, cd.image_url, cd.status,
+               cd.caption, cd.hashtags, cd.image_url, cd.image_urls, cd.status,
                cd.scheduled_for, cd.criado_em
         FROM content_drafts cd
         JOIN businesses b ON b.id = cd.business_id
@@ -210,4 +227,6 @@ def list_drafts(user=Depends(get_current_user), status: str = None) -> list[dict
     for row in (rows or []):
         if row.get("hashtags") and isinstance(row["hashtags"], str):
             row["hashtags"] = json.loads(row["hashtags"])
+        if row.get("image_urls") and isinstance(row["image_urls"], str):
+            row["image_urls"] = json.loads(row["image_urls"])
     return rows or []

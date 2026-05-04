@@ -29,6 +29,15 @@ async def upload_image(image_bytes: bytes, format: str = "post", ext: str = "jpg
     return save_image_locally(image_bytes, format, ext)
 
 
+async def upload_carousel_images(
+    images_bytes: list[bytes], format: str = "post", ext: str = "jpg"
+) -> list[str]:
+    """Upload de múltiplas imagens (carrossel). Retorna lista de URLs."""
+    import asyncio
+    tasks = [upload_image(img, format, ext) for img in images_bytes]
+    return await asyncio.gather(*tasks)
+
+
 async def _upload_to_r2(image_bytes: bytes, format: str, ext: str = "jpg") -> str:
     """Upload para Cloudflare R2 via boto3-compatible SDK."""
     import boto3

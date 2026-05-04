@@ -20,31 +20,45 @@ _client = anthropic.Anthropic()
 MODEL_SMART = "claude-haiku-4-5-20251001"
 MODEL_FAST = "claude-haiku-4-5-20251001"
 
-SOFIA_SYSTEM = """Você é Sofia, Diretora Criativa de uma agência de marketing digital.
-Fala português brasileiro de forma direta, profissional e calorosa.
+SOFIA_SYSTEM = """Você é Sofia — Diretora Criativa com passagem por W3haus, Africa e David SP. Hoje lidera a agência de IA da Orbita.
 
-REGRA #1 — AÇÃO PRIMEIRO:
-Quando o cliente pedir para criar conteúdo, CRIE IMEDIATAMENTE usando create_content_direct. Não fique fazendo perguntas antes. Use o que já sabe sobre o negócio (nome, tipo, descrição) e crie. O cliente pode ajustar depois.
+CONTEXTO FUNDAMENTAL:
+Você é a diretora criativa responsável pelo marketing do NEGÓCIO que está selecionado (veja "CONTEXTO COMPLETO DA MARCA" abaixo). Esse negócio já existe no sistema — o usuário é o dono/gestor dele. Seu trabalho é cuidar do marketing e conteúdo DESSE negócio específico, não criar uma agência nova. Nunca pergunte "qual é o nome da sua agência" ou "o que você oferece" — essas informações já estão no perfil da marca. Se algo estiver faltando, use check_readiness e get_brand_profile para descobrir, e complete com update_business_profile.
+
+COMO VOCÊ TRABALHA:
+Você COORDENA e EXECUTA. Não é uma assistente virtual — é uma diretora criativa que toma decisões, delega para especialistas e entrega resultado.
+
+REGRAS ABSOLUTAS:
+1. AÇÃO PRIMEIRO: quando pedirem conteúdo, CRIE na hora com create_content_direct. Não pergunte "sobre o quê?".
+2. Máximo 1 pergunta por resposta. Se precisa de info, já sugira um default e execute.
+3. Respostas CURTAS: 2-4 parágrafos no máximo. Sem listas intermináveis.
+4. Sem emojis excessivos. Máximo 1-2 por resposta, e só quando natural.
+5. Não repita o que o cliente já viu. Não reformule o que ele disse.
+6. Tom de consultora sênior, não de chatbot. Assertiva, direta, profissional.
+7. NUNCA pergunte informações que já estão no contexto da marca. Leia o contexto antes de responder.
 
 QUANDO PERGUNTAR (e só nestes casos):
-- Se o cliente disser "olá" ou algo genérico sem pedir nada específico → apresente-se em 2 frases e pergunte o que ele precisa
-- Se o cliente pedir algo mas você não tem o mínimo (nem sabe o tipo do negócio) → pergunte APENAS o essencial
-- Se o cliente mandar um link → analise com analyze_client_url e salve os dados
+- "Olá" genérico → apresente-se em 1 frase, mencione o nome do negócio do cliente, e pergunte o que precisa
+- Falta contexto mínimo que NÃO está no perfil → pergunte APENAS o essencial
+- Link enviado → analise com analyze_client_url silenciosamente
 
-COMO CRIAR CONTEÚDO:
-1. Cliente pede "cria um post sobre X" → use create_content_direct imediatamente
-2. Cliente pede "cria uma semana de conteúdo" → use create_content_direct várias vezes com temas variados
-3. Após criar, mostre um resumo curto: tema, formato, e diga que está em "Revisar & Aprovar"
+IMAGENS DO USUÁRIO:
+- Foto de produto ou "cria post com essa imagem" → create_content_direct com use_uploaded_image=true
+- Referência visual → analise e oriente a geração via IA
+- Não pergunte "o que deseja fazer com a imagem?" — interprete pelo contexto
 
-SUA EQUIPE (use quando necessário):
-- delegate_to_mara → análise de performance, calendário editorial, aprovações em lote
-- delegate_to_pixel → edição de imagens, identidade visual
-- delegate_to_luna → Google Ads, campanhas pagas
+ONBOARDING (primeiro contato):
+Use check_readiness para ver o que falta no perfil. Se o Instagram está conectado mas sem análise, rode analyze_instagram_style. Seja proativa: diga o que está pronto, o que falta, e ofereça criar um post de teste. NUNCA peça informações que já existem no perfil.
 
-COMUNICAÇÃO:
-- Respostas curtas e diretas, máximo 3-4 parágrafos
-- Não repita informações que o cliente já sabe
-- Após ações, ofereça 1-2 próximos passos
+CONTEÚDO:
+1. IG conectado sem análise → analyze_instagram_style primeiro
+2. Pedido de conteúdo → create_content_direct imediatamente
+3. Após criar → resumo em 2 linhas: formato, tema, e que está em "Revisar & Aprovar"
+
+SUA EQUIPE (delegue quando necessário):
+- delegate_to_mara → performance, calendário editorial
+- delegate_to_pixel → identidade visual, edição de imagem
+- delegate_to_luna → Google Ads, tráfego pago
 """
 
 TOOLS: list[dict[str, Any]] = [
@@ -91,14 +105,16 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "create_content_direct",
-        "description": "Cria um post/story/reel DIRETO (mais rápido e barato). Use esta tool para criação simples de conteúdo ao invés de delegate_to_mara.",
+        "description": "Cria um post/story/reel/carrossel DIRETO (mais rápido e barato). Use esta tool para criação simples de conteúdo ao invés de delegate_to_mara. Se use_uploaded_image=true, usa a imagem que o usuário enviou ao invés de gerar uma nova.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "objective": {"type": "string", "description": "Objetivo ou tema do conteúdo"},
-                "format": {"type": "string", "enum": ["post", "story", "reel"], "description": "Formato"},
+                "format": {"type": "string", "enum": ["post", "story", "reel", "carrossel"], "description": "Formato (carrossel = 2-10 slides)"},
                 "tone": {"type": "string", "enum": ["profissional", "descontraido", "urgente", "educativo"], "description": "Tom de voz"},
                 "audience": {"type": "string", "description": "Público-alvo"},
+                "slide_count": {"type": "integer", "description": "Número de slides do carrossel (2-10, padrão 5)", "minimum": 2, "maximum": 10},
+                "use_uploaded_image": {"type": "boolean", "description": "Se true, usa a imagem enviada pelo usuário ao invés de gerar via IA. Use quando o usuário enviar uma imagem e pedir para criar um post com ela."},
             },
             "required": ["objective"],
         },
@@ -161,6 +177,11 @@ TOOLS: list[dict[str, Any]] = [
             },
             "required": ["url"],
         },
+    },
+    {
+        "name": "analyze_instagram_style",
+        "description": "Analisa os posts existentes do Instagram conectado para entender estilo visual, tom de escrita e padrões de conteúdo. Use SEMPRE antes de criar conteúdo quando o business tem Instagram conectado, para que os posts gerados fiquem consistentes com o feed existente.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "update_business_profile",
@@ -260,7 +281,9 @@ def _exec_update_visual_identity(business_id: str, tool_input: dict) -> dict:
     return {"success": True, "message": "Identidade visual atualizada!", "fields": list(clean.keys())}
 
 
-async def _exec_create_content_direct(business_id: str, tool_input: dict) -> dict:
+async def _exec_create_content_direct(
+    business_id: str, tool_input: dict, uploaded_image_url: str | None = None,
+) -> dict:
     """Cria conteúdo direto via orchestrator — bypassa Mara, economiza ~3 chamadas Claude."""
     from src.engines.orchestrator import generate_content
     brand_ctx = get_unified_brand_context(business_id)
@@ -281,8 +304,10 @@ async def _exec_create_content_direct(business_id: str, tool_input: dict) -> dic
             tone=tool_input.get("tone", "profissional"),
             audience=tool_input.get("audience", "geral"),
             brand_strategy=enriched if enriched else None,
+            slide_count=tool_input.get("slide_count", 5),
+            uploaded_image_url=uploaded_image_url,
         )
-        return {
+        result = {
             "success": True,
             "draft_id": draft["id"],
             "caption": draft.get("caption", "")[:300],
@@ -291,6 +316,10 @@ async def _exec_create_content_direct(business_id: str, tool_input: dict) -> dic
             "format": draft.get("format"),
             "status": "pending_approval",
         }
+        if draft.get("image_urls"):
+            result["image_urls"] = draft["image_urls"]
+            result["slide_count"] = len(draft["image_urls"])
+        return result
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -349,6 +378,12 @@ def _exec_check_readiness(business_id: str) -> dict:
     """Computa readiness score do perfil do negócio."""
     from api.business.router import _compute_readiness
     return _compute_readiness(business_id)
+
+
+async def _exec_analyze_instagram_style(business_id: str) -> dict:
+    """Analisa os posts existentes do Instagram para entender o estilo."""
+    from src.engines.intelligence.instagram_analyzer import analyze_instagram_style
+    return await analyze_instagram_style(business_id)
 
 
 async def _exec_analyze_client_url(business_id: str, url: str) -> dict:
@@ -474,21 +509,22 @@ def _load_conversation(business_id: str) -> list[dict]:
 
 
 def _compact_messages(messages: list[dict]) -> list[dict]:
-    """Compacta tool_result para economizar tokens no histórico."""
+    """Compacta tool_result e remove imagens base64 para economizar tokens no histórico."""
     compacted = []
     for msg in messages:
         if msg.get("role") == "user" and isinstance(msg.get("content"), list):
-            # Compactar tool_results — manter só resumo
             compact_content = []
             for item in msg["content"]:
                 if item.get("type") == "tool_result":
                     try:
                         data = json.loads(item["content"]) if isinstance(item["content"], str) else item["content"]
-                        # Resumir para max 200 chars
                         summary = json.dumps(data, ensure_ascii=False, default=str)[:200]
                         compact_content.append({**item, "content": summary})
                     except Exception:
                         compact_content.append(item)
+                elif item.get("type") == "image":
+                    # Remove imagem base64 — substitui por placeholder
+                    compact_content.append({"type": "text", "text": "[imagem enviada pelo usuário]"})
                 else:
                     compact_content.append(item)
             compacted.append({"role": msg["role"], "content": compact_content})
@@ -500,6 +536,14 @@ def _compact_messages(messages: list[dict]) -> list[dict]:
 def _save_conversation(business_id: str, usuario_id: str, messages: list[dict]) -> None:
     compacted = _compact_messages(messages)
     trimmed = compacted[-20:] if len(compacted) > 20 else compacted
+    # Garante que o histórico comece com uma mensagem de user,
+    # caso contrário a API do Claude rejeita e o chat parece vazio ao recarregar
+    while trimmed and not (
+        trimmed[0].get("role") == "user"
+        and (isinstance(trimmed[0].get("content"), str) or isinstance(trimmed[0].get("content"), list))
+        and not (isinstance(trimmed[0].get("content"), list) and trimmed[0]["content"][0].get("type") == "tool_result")
+    ):
+        trimmed.pop(0)
     msgs_json = json.dumps(trimmed, ensure_ascii=False, default=str)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -531,14 +575,34 @@ async def run_sofia(
     business_id: str,
     usuario_id: str,
     user_message: str,
+    image_bytes: bytes | None = None,
 ) -> dict[str, Any]:
     """
     Loop agêntico da Sofia — Diretora Criativa.
     Pode delegar para Mara, Pixel e Luna.
+    Aceita imagem opcional para usar como base de conteúdo.
     """
     brand_ctx = get_unified_brand_context(business_id)
     history = _load_conversation(business_id)
-    history.append({"role": "user", "content": user_message})
+
+    # Build user message — multimodal se tiver imagem
+    image_url = None
+    if image_bytes:
+        import base64
+        from src.engines.image_engine.storage import save_image_locally
+        b64 = base64.b64encode(image_bytes).decode()
+        media_type = "image/png" if image_bytes[:4] == b'\x89PNG' else "image/jpeg"
+        ext = "png" if media_type == "image/png" else "jpg"
+        user_content: list[dict] | str = [
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+            {"type": "text", "text": user_message or "Use esta imagem para criar um post."},
+        ]
+        # Salva imagem localmente para uso posterior (ex: usar direto no post)
+        image_url = save_image_locally(image_bytes, "post", ext)
+    else:
+        user_content = user_message
+
+    history.append({"role": "user", "content": user_content})
 
     system = SOFIA_SYSTEM + brand_context_to_prompt(brand_ctx)
 
@@ -574,7 +638,10 @@ async def run_sofia(
 
             try:
                 if tool_name == "create_content_direct":
-                    result = await _exec_create_content_direct(business_id, tool_input)
+                    result = await _exec_create_content_direct(
+                        business_id, tool_input,
+                        uploaded_image_url=image_url if tool_input.get("use_uploaded_image") else None,
+                    )
                     steps.append({"agent": "mara", "action": f"Criou {tool_input.get('format','post')}: {tool_input['objective'][:60]}", "status": "done" if result.get("success") else "error"})
                 elif tool_name == "get_brand_profile":
                     result = _exec_get_brand_profile(business_id)
@@ -604,6 +671,12 @@ async def run_sofia(
                 elif tool_name == "analyze_client_url":
                     result = await _exec_analyze_client_url(business_id, tool_input["url"])
                     steps.append({"agent": "sofia", "action": f"Analisou {tool_input['url'][:50]}", "status": "done" if result.get("success") else "error"})
+                elif tool_name == "analyze_instagram_style":
+                    result = await _exec_analyze_instagram_style(business_id)
+                    steps.append({"agent": "sofia", "action": "Analisou estilo do Instagram", "status": "done" if result.get("success") else "error"})
+                    if result.get("success"):
+                        brand_ctx = get_unified_brand_context(business_id)
+                        system = SOFIA_SYSTEM + brand_context_to_prompt(brand_ctx)
                 elif tool_name == "update_business_profile":
                     result = _exec_update_business_profile(business_id, tool_input)
                     brand_ctx = get_unified_brand_context(business_id)

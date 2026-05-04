@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../services/api'
 import type { Business, VisualIdentity } from '../services/api'
+import { ChatMessage } from '../components/ChatMessage'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -299,11 +300,11 @@ export function DesignerPage() {
                     style={{
                       background: msg.role === 'user' ? '#007bff' : 'var(--bg-chat-msg)',
                       color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-                      whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
+                      ...(msg.role === 'user' ? { whiteSpace: 'pre-wrap' as const } : {}),
                     }}
                   >
-                    {msg.content}
+                    <ChatMessage content={msg.content} role={msg.role} />
                   </div>
                   {/* Imagem resultado do agente */}
                   {msg.image_url && (

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../services/api'
 
+import type { SubscriptionInfo } from '../services/api'
+
 interface Stats {
   pending: number
   approved: number
@@ -55,6 +57,7 @@ interface AdminLTEHomeProps {
 export function AdminLTEHome({ onNavigate }: AdminLTEHomeProps) {
   const { usuario } = useAuth()
   const [stats, setStats] = useState<Stats>({ pending: 0, approved: 0, published: 0, businesses: 0 })
+  const [sub, setSub] = useState<SubscriptionInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
@@ -62,14 +65,16 @@ export function AdminLTEHome({ onNavigate }: AdminLTEHomeProps) {
   useEffect(() => {
     async function load() {
       try {
-        const [businesses, pending, all] = await Promise.all([
+        const [businesses, pending, all, subscription] = await Promise.all([
           api.listBusinesses(),
           api.listDrafts('pending_approval'),
           api.listDrafts(),
+          api.getSubscription().catch(() => null),
         ])
         const published = all.filter(d => d.status === 'published').length
         const approved = all.filter(d => d.status === 'approved').length
         setStats({ pending: pending.length, approved, published, businesses: businesses.length })
+        if (subscription) setSub(subscription)
       } catch {
         // silently fail
       } finally {
@@ -131,6 +136,54 @@ export function AdminLTEHome({ onNavigate }: AdminLTEHomeProps) {
           </div>
         </div>
       </div>
+
+      {/* Plano & Uso */}
+      {sub && (
+        <div className="row mt-3 mb-1">
+          <div className="col-12">
+            <div className="card mb-0" style={{ borderRadius: 12 }}>
+              <div className="card-body py-3 px-4">
+                <div className="d-flex align-items-center justify-content-between flex-wrap" style={{ gap: 12 }}>
+                  <div className="d-flex align-items-center" style={{ gap: 12 }}>
+                    <span className={`badge badge-${sub.plano === 'premium' ? 'warning' : sub.plano === 'pro' ? 'primary' : 'success'}`} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8 }}>
+                      {sub.plano.toUpperCase()}
+                    </span>
+                    {sub.status === 'trial' && (
+                      <span className="text-muted small">
+                        <i className="fas fa-clock mr-1" />Trial
+                        {sub.trial_ends_at && ` ate ${new Date(sub.trial_ends_at).toLocaleDateString('pt-BR')}`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="d-flex align-items-center" style={{ gap: 16 }}>
+                    <div style={{ minWidth: 200 }}>
+                      <div className="d-flex justify-content-between mb-1">
+                        <span className="small text-muted">Posts este mes</span>
+                        <span className="small font-weight-bold">{sub.posts_used}/{sub.posts_limit > 99999 ? '∞' : sub.posts_limit}</span>
+                      </div>
+                      <div className="progress" style={{ height: 6, borderRadius: 3 }}>
+                        <div
+                          className={`progress-bar ${sub.posts_used / sub.posts_limit > 0.8 ? 'bg-danger' : 'bg-primary'}`}
+                          style={{ width: `${Math.min(100, (sub.posts_used / sub.posts_limit) * 100)}%`, borderRadius: 3 }}
+                        />
+                      </div>
+                    </div>
+                    {sub.plano !== 'premium' && (
+                      <button
+                        className="btn btn-sm btn-outline-primary"
+                        style={{ borderRadius: 8, fontSize: 12, fontWeight: 600 }}
+                        onClick={() => onNavigate?.('businesses')}
+                      >
+                        <i className="fas fa-arrow-up mr-1" />Upgrade
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Métricas */}
       <div className="row mt-3">

@@ -78,6 +78,66 @@ def analytics(
     }
 
 
+@router.post("/sync-metrics")
+async def sync_metrics(business_id: str = Query(...), user=Depends(get_current_user)) -> dict[str, Any]:
+    """Busca métricas reais dos posts publicados via Instagram Graph API."""
+    from src.engines.intelligence.ig_metrics import fetch_post_insights
+    from src.engines.publisher.token_manager import decrypt_token
+    from datetime import datetime
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT instagram_account_id, instagram_access_token FROM businesses WHERE id = %s AND usuario_id = %s",
+                (business_id, user["sub"]),
+            )
+            biz = cur.fetchone()
+
+    if not biz or not biz.get("instagram_access_token"):
+        from fastapi import HTTPException
+        raise HTTPException(400, "Instagram nao conectado")
+
+    access_token = decrypt_token(biz["instagram_access_token"])
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT sp.id, sp.instagram_media_id
+                   FROM scheduled_posts sp
+                   JOIN content_drafts cd ON cd.id = sp.content_draft_id
+                   WHERE cd.business_id = %s AND sp.status = 'published'
+                     AND sp.instagram_media_id IS NOT NULL
+                   ORDER BY sp.posted_at DESC LIMIT 20""",
+                (business_id,),
+            )
+            posts = cur.fetchall() or []
+
+    updated = 0
+    errors = 0
+    for post in posts:
+        try:
+            metrics = await fetch_post_insights(post["instagram_media_id"], access_token)
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """UPDATE scheduled_posts SET
+                           likes = %s, comments = %s, reach = %s, impressions = %s,
+                           saved = %s, shares = %s, engagement_rate = %s,
+                           metrics_updated_at = %s
+                           WHERE id = %s""",
+                        (
+                            metrics["likes"], metrics["comments"], metrics["reach"],
+                            metrics["impressions"], metrics["saved"], metrics["shares"],
+                            metrics["engagement_rate"], datetime.utcnow(), post["id"],
+                        ),
+                    )
+            updated += 1
+        except Exception:
+            errors += 1
+
+    return {"synced": updated, "errors": errors, "total": len(posts)}
+
+
 @router.get("/history")
 def history(user=Depends(get_current_user), limit: int = 20) -> list[dict[str, Any]]:
     with get_connection() as conn:
@@ -86,8 +146,10 @@ def history(user=Depends(get_current_user), limit: int = 20) -> list[dict[str, A
                 """
                 SELECT sp.id, sp.platform, sp.scheduled_for, sp.posted_at,
                        sp.instagram_media_id, sp.status,
+                       sp.likes, sp.comments, sp.reach, sp.impressions,
+                       sp.saved, sp.shares, sp.engagement_rate,
                        cd.format, cd.caption, cd.image_url,
-                       b.name as business_name
+                       b.name as business_name, b.id as business_id
                 FROM scheduled_posts sp
                 JOIN content_drafts cd ON cd.id = sp.content_draft_id
                 JOIN businesses b ON b.id = cd.business_id

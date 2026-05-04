@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../services/api'
 import type { Business } from '../services/api'
+import { ChatMessage } from '../components/ChatMessage'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -162,11 +163,11 @@ export function AgentPage() {
                     maxWidth: '75%',
                     background: msg.role === 'user' ? '#007bff' : 'var(--bg-chat-msg)',
                     color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-                    whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
+                    ...(msg.role === 'user' ? { whiteSpace: 'pre-wrap' as const } : {}),
                   }}
                 >
-                  {msg.content}
+                  <ChatMessage content={msg.content} role={msg.role} />
                 </div>
                 {msg.role === 'user' && (
                   <div
