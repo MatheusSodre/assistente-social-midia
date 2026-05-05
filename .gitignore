@@ -6,22 +6,27 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
-dist/
-build/
 *.egg
 
-# Env
+# Env (manter *.env.example)
 .env
-*.env.local
+.env.local
+backend/.env
+frontend/.env
 
-# Logs / tmp
-apps/backend/logs/
-apps/backend/tmp/
-apps/backend/storage/
+# Backend runtime
+backend/uploads/
+backend/logs/
+backend/tmp/
 
 # Frontend
 node_modules/
-apps/frontend/dist/
+frontend/dist/
+frontend/.vite/
+
+# Build artifacts
+dist/
+build/
 
 # IDEs
 .idea/
@@ -36,3 +41,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Logs
+*.log
